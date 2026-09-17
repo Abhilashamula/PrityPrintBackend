@@ -1,0 +1,17 @@
+services:
+  backend:
+    build: .
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-jdbc:postgresql://host.docker.internal:5432/pingprint}
+      DATABASE_USERNAME: ${DATABASE_USERNAME:-postgres}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD:?Set DATABASE_PASSWORD to your PostgreSQL password}
+      JWT_SECRET: ${JWT_SECRET:-local-development-secret-change-this-value-123456789}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:?Set GOOGLE_CLIENT_ID to your Google Web Client ID}
+      RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:?Set RAZORPAY_KEY_ID in the backend .env}
+      RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:?Set RAZORPAY_KEY_SECRET in the backend .env}
+      RAZORPAY_WEBHOOK_SECRET: ${RAZORPAY_WEBHOOK_SECRET:?Set RAZORPAY_WEBHOOK_SECRET in the backend .env}
+      REQUIRE_EMAIL_VERIFICATION: ${REQUIRE_EMAIL_VERIFICATION:-false}
+      PORT: 8080
+    ports:
+      - "8080:8080"
