@@ -6,6 +6,7 @@ import com.pingprint.printer.PrinterStatus;
 import com.pingprint.security.JwtService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Min;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.*;
 import java.nio.charset.StandardCharsets;
@@ -27,6 +28,7 @@ public class AdminController {
     public record LoginRequest(@NotBlank String username, @NotBlank String password) { }
     public record AddPrinterRequest(@NotBlank String name, @NotBlank String location, @NotBlank String agentKey) { }
     public record StatusRequest(@NotBlank String status) { }
+    public record PricingRequest(@Min(1) long priceBwMinor, @Min(1) long priceColorMinor, @Min(1) int maxFileMb) { }
 
     @PostMapping("/login")
     public Map<String, String> login(@Valid @RequestBody LoginRequest request) {
@@ -58,6 +60,17 @@ public class AdminController {
         Map<String, Object> totals = db.queryForMap("SELECT COUNT(*) AS orders, COALESCE(SUM(amount_minor) FILTER (WHERE status IN ('CAPTURED', 'REFUNDED')), 0) AS collected_minor, COALESCE(SUM(amount_minor) FILTER (WHERE status = 'REFUNDED'), 0) AS refunded_minor FROM payment_transactions");
         List<Map<String, Object>> transactions = db.queryForList("SELECT id, order_id, provider, provider_payment_id, amount_minor, status, created_at FROM payment_transactions ORDER BY created_at DESC LIMIT 100");
         return Map.of("totals", totals, "transactions", transactions);
+    }
+
+    @GetMapping("/pricing")
+    public Map<String, Object> pricing() {
+        return db.queryForMap("SELECT price_bw_minor, price_color_minor, max_file_mb, updated_at FROM master_pricing WHERE id = 1");
+    }
+
+    @PutMapping("/pricing")
+    public Map<String, Object> updatePricing(@Valid @RequestBody PricingRequest request) {
+        db.update("UPDATE master_pricing SET price_bw_minor = ?, price_color_minor = ?, max_file_mb = ?, updated_at = NOW() WHERE id = 1", request.priceBwMinor(), request.priceColorMinor(), request.maxFileMb());
+        return pricing();
     }
 
     private String hash(String value) {

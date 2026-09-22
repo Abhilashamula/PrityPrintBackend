@@ -1,0 +1,22 @@
+CREATE TABLE documents (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES app_users(id) ON DELETE CASCADE,
+  storage_key VARCHAR(512) NOT NULL UNIQUE,
+  original_file_name VARCHAR(255) NOT NULL,
+  content_type VARCHAR(128) NOT NULL,
+  byte_size BIGINT NOT NULL CHECK (byte_size > 0),
+  page_count INTEGER NOT NULL CHECK (page_count > 0),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE printers
+  ADD COLUMN IF NOT EXISTS manufacturer VARCHAR(80),
+  ADD COLUMN IF NOT EXISTS model VARCHAR(120),
+  ADD COLUMN IF NOT EXISTS provider VARCHAR(32) NOT NULL DEFAULT 'LOCAL_AGENT',
+  ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT TRUE,
+  ADD COLUMN IF NOT EXISTS color_supported BOOLEAN NOT NULL DEFAULT TRUE,
+  ADD COLUMN IF NOT EXISTS duplex_supported BOOLEAN NOT NULL DEFAULT FALSE,
+  ADD COLUMN IF NOT EXISTS price_bw_minor BIGINT NOT NULL DEFAULT 200 CHECK (price_bw_minor > 0),
+  ADD COLUMN IF NOT EXISTS price_color_minor BIGINT NOT NULL DEFAULT 1000 CHECK (price_color_minor > 0);
+
+CREATE INDEX idx_documents_user ON documents(user_id, created_at DESC);
