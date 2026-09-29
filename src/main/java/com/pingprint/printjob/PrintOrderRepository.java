@@ -6,4 +6,5 @@ import java.util.Optional;
 
 public interface PrintOrderRepository extends JpaRepository<PrintOrder, UUID> {
 	Optional<PrintOrder> findByRazorpayOrderId(String razorpayOrderId);
+	Optional<PrintOrder> findByIdAndUserId(UUID id, UUID userId);
 }

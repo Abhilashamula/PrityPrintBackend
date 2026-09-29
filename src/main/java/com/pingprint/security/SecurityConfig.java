@@ -13,13 +13,18 @@ import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import org.springframework.beans.factory.annotation.Value;
 import java.util.List;
+import org.springframework.http.HttpMethod;
 
 @Configuration
 public class SecurityConfig {
     @Bean PasswordEncoder passwordEncoder() { return new BCryptPasswordEncoder(); }
     @Bean SecurityFilterChain securityFilterChain(HttpSecurity http, JwtAuthenticationFilter jwtFilter) throws Exception {
         http.csrf(csrf -> csrf.disable()).cors(cors -> { }).sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-            .authorizeHttpRequests(auth -> auth.requestMatchers("/api/auth/**", "/api/admin/login", "/api/health", "/api/print/guest-session/**", "/api/payments/paypal/webhook", "/api/payments/razorpay/**", "/api/printers", "/api/pricing", "/api/documents", "/api/print-orders", "/actuator/health").permitAll().requestMatchers("/api/admin/**").hasRole("ADMIN").anyRequest().authenticated())
+            .authorizeHttpRequests(auth -> auth
+                .requestMatchers("/api/auth/**", "/api/admin/login", "/api/health", "/api/payments/paypal/webhook", "/api/payments/razorpay/webhook", "/api/epson/oauth/callback", "/actuator/health").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/printers", "/api/printers/*", "/api/printers/*/capabilities", "/api/pricing").permitAll()
+                .requestMatchers("/api/admin/**").hasRole("ADMIN")
+                .anyRequest().authenticated())
             .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }

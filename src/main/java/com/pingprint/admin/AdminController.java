@@ -3,6 +3,7 @@ package com.pingprint.admin;
 import com.pingprint.printer.Printer;
 import com.pingprint.printer.PrinterRepository;
 import com.pingprint.printer.PrinterStatus;
+import com.pingprint.printer.PrinterProviderConnectionRepository;
 import com.pingprint.security.JwtService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -22,12 +23,14 @@ public class AdminController {
     private final JwtService jwt;
     private final PrinterRepository printers;
     private final JdbcTemplate db;
+    private final PrinterProviderConnectionRepository connections;
 
-    public AdminController(JwtService jwt, PrinterRepository printers, JdbcTemplate db) { this.jwt = jwt; this.printers = printers; this.db = db; }
+    public AdminController(JwtService jwt, PrinterRepository printers, JdbcTemplate db, PrinterProviderConnectionRepository connections) { this.jwt = jwt; this.printers = printers; this.db = db; this.connections = connections; }
 
     public record LoginRequest(@NotBlank String username, @NotBlank String password) { }
-    public record AddPrinterRequest(@NotBlank String name, @NotBlank String location, @NotBlank String agentKey) { }
+    public record AddPrinterRequest(@NotBlank String name, @NotBlank String location, String provider, String agentKey) { }
     public record StatusRequest(@NotBlank String status) { }
+    public record UpdatePrinterRequest(@NotBlank String name, @NotBlank String location, boolean active) { }
     public record PricingRequest(@Min(1) long priceBwMinor, @Min(1) long priceColorMinor, @Min(1) int maxFileMb) { }
 
     @PostMapping("/login")
@@ -38,13 +41,26 @@ public class AdminController {
 
     @GetMapping("/printers")
     public List<Map<String, Object>> printers() {
-        return printers.findAll().stream().map(printer -> Map.<String, Object>of("id", printer.getId(), "name", printer.getName(), "location", printer.getLocation(), "status", printer.getStatus())).toList();
+        return printers.findAll().stream().map(this::printerView).toList();
     }
 
     @PostMapping("/printers")
     public Map<String, Object> addPrinter(@Valid @RequestBody AddPrinterRequest request) {
-        Printer printer = printers.save(new Printer(request.name().trim(), request.location().trim(), hash(request.agentKey())));
-        return Map.of("id", printer.getId(), "name", printer.getName(), "location", printer.getLocation(), "status", printer.getStatus(), "agentKey", request.agentKey());
+        String provider = request.provider() == null || request.provider().isBlank() ? "EPSON_CONNECT" : request.provider().toUpperCase();
+        Printer printer;
+        if (provider.equals("LOCAL_AGENT")) {
+            if (request.agentKey() == null || request.agentKey().isBlank()) throw new IllegalArgumentException("Agent key is required for local-agent printers");
+            printer = new Printer(request.name().trim(), request.location().trim(), hash(request.agentKey()));
+        } else if (provider.equals("EPSON_CONNECT")) printer = Printer.cloud(request.name().trim(), request.location().trim(), provider);
+        else throw new IllegalArgumentException("Unsupported print provider");
+        return printerView(printers.save(printer));
+    }
+
+    @PutMapping("/printers/{id}")
+    public Map<String, Object> updatePrinter(@PathVariable UUID id, @Valid @RequestBody UpdatePrinterRequest request) {
+        Printer printer = printers.findById(id).orElseThrow(() -> new IllegalArgumentException("Printer not found"));
+        printer.updateDetails(request.name().trim(), request.location().trim(), request.active());
+        return printerView(printers.save(printer));
     }
 
     @PutMapping("/printers/{id}/status")
@@ -76,5 +92,14 @@ public class AdminController {
     private String hash(String value) {
         try { return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8))); }
         catch (Exception error) { throw new IllegalStateException(error); }
+    }
+    private Map<String, Object> printerView(Printer printer) {
+        var connection = connections.findByPrinterId(printer.getId()).orElse(null);
+        Map<String, Object> value = new java.util.LinkedHashMap<>();
+        value.put("id", printer.getId()); value.put("name", printer.getName()); value.put("location", printer.getLocation());
+        value.put("status", printer.getStatus()); value.put("active", printer.isActive()); value.put("provider", printer.getProvider());
+        value.put("manufacturer", printer.getManufacturer()); value.put("model", printer.getModel());
+        value.put("connectionState", connection == null ? "NOT_CONNECTED" : connection.isReauthorizationRequired() ? "REAUTHORIZATION_REQUIRED" : connection.isConnected() ? "CONNECTED" : "OFFLINE");
+        return value;
     }
 }

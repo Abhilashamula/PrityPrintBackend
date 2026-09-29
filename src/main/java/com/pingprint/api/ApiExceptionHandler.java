@@ -6,6 +6,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import java.util.Map;
+import org.springframework.security.access.AccessDeniedException;
 
 @RestControllerAdvice
 public class ApiExceptionHandler {
@@ -21,4 +22,7 @@ public class ApiExceptionHandler {
     @ExceptionHandler(IllegalStateException.class)
     @ResponseStatus(HttpStatus.CONFLICT)
     Map<String, String> conflict(IllegalStateException error) { return Map.of("error", error.getMessage()); }
+    @ExceptionHandler(AccessDeniedException.class)
+    @ResponseStatus(HttpStatus.FORBIDDEN)
+    Map<String, String> forbidden(AccessDeniedException error) { return Map.of("error", error.getMessage()); }
 }

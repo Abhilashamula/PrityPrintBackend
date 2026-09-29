@@ -1,0 +1,2 @@
+ALTER TABLE print_orders
+  ADD COLUMN IF NOT EXISTS page_range VARCHAR(512);

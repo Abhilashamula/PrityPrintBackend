@@ -20,6 +20,7 @@ public class DocumentController {
         return Map.of("id", document.getId(), "fileName", document.getOriginalFileName(), "pageCount", document.getPageCount(), "contentType", document.getContentType());
     }
     private UUID userId(Authentication authentication) {
-        return authentication != null && authentication.getPrincipal() instanceof UUID id ? id : null;
+        if (authentication != null && authentication.getPrincipal() instanceof UUID id) return id;
+        throw new org.springframework.security.access.AccessDeniedException("Sign in is required");
     }
 }

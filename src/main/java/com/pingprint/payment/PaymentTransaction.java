@@ -18,13 +18,24 @@ public class PaymentTransaction {
     @Column(name = "failure_reason") private String failureReason;
     @Column(name = "provider_event_id") private String providerEventId;
     @Column(name = "created_at", nullable = false) private Instant createdAt;
+    @Column(name = "updated_at", nullable = false) private Instant updatedAt;
+    @Column(name = "refund_id") private String refundId;
+    @Column(name = "refund_amount_minor") private Long refundAmountMinor;
+    @Column(name = "refund_reason") private String refundReason;
+    @Column(name = "refunded_at") private Instant refundedAt;
 
     protected PaymentTransaction() { }
     public PaymentTransaction(PrintOrder order, String provider, String providerOrderId, long amountMinor) {
-        this.order = order; this.provider = provider; this.providerOrderId = providerOrderId; this.amountMinor = amountMinor; this.status = "CREATED"; this.createdAt = Instant.now();
+        this.order = order; this.provider = provider; this.providerOrderId = providerOrderId; this.amountMinor = amountMinor; this.status = "CREATED"; this.createdAt = Instant.now(); this.updatedAt = createdAt;
     }
     public String getStatus() { return status; }
-    public void capture(String paymentId) { providerPaymentId = paymentId; status = "CAPTURED"; }
-    public void fail(String reason) { status = "FAILED"; failureReason = reason; }
-    public void setProviderEventId(String value) { providerEventId = value; }
+    public String getProviderPaymentId() { return providerPaymentId; }
+    public String getProviderOrderId() { return providerOrderId; }
+    public UUID getOrderId() { return order.getId(); }
+    public long getAmountMinor() { return amountMinor; }
+    public String getRefundId() { return refundId; }
+    public void capture(String paymentId) { providerPaymentId = paymentId; status = "CAPTURED"; updatedAt = Instant.now(); }
+    public void fail(String reason) { status = "FAILED"; failureReason = reason; updatedAt = Instant.now(); }
+    public void refund(String id, long amount, String reason) { refundId = id; refundAmountMinor = amount; refundReason = reason; status = "REFUNDED"; refundedAt = Instant.now(); updatedAt = refundedAt; order.markRefunded(); }
+    public void setProviderEventId(String value) { providerEventId = value; updatedAt = Instant.now(); }
 }

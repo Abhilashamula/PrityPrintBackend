@@ -13,7 +13,7 @@ public class PrinterController {
 
     @GetMapping
     public List<Map<String, Object>> available() {
-        return printers.findByStatusInOrderByNameAsc(List.of(PrinterStatus.ONLINE, PrinterStatus.BUSY)).stream()
+        return printers.findByActiveTrueAndStatusInOrderByNameAsc(List.of(PrinterStatus.ONLINE, PrinterStatus.BUSY)).stream()
             .map(printer -> Map.<String, Object>of("id", printer.getId(), "name", printer.getName(), "location", printer.getLocation(), "status", printer.getStatus()))
             .toList();
     }

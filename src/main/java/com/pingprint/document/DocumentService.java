@@ -40,6 +40,13 @@ public class DocumentService {
             return documents.save(new Document(user, storageKey, originalName, contentType(extension), bytes.length, pageCount));
         } catch (IOException error) { throw new IllegalStateException("Could not store document", error); }
     }
+    public byte[] read(Document document) {
+        try {
+            Path target = storageRoot.resolve(document.getStorageKey()).normalize();
+            if (!target.startsWith(storageRoot)) throw new IllegalArgumentException("Invalid document storage path");
+            return Files.readAllBytes(target);
+        } catch (IOException error) { throw new IllegalStateException("Could not read stored document", error); }
+    }
 
     private byte[] read(MultipartFile file) { try { return file.getBytes(); } catch (IOException error) { throw new IllegalArgumentException("Could not read document", error); } }
     private String safeName(String name) { String value = name == null ? "document" : Paths.get(name).getFileName().toString(); return value.replaceAll("[^A-Za-z0-9._ -]", "_"); }

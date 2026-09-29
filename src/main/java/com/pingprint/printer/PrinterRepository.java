@@ -6,4 +6,5 @@ import java.util.UUID;
 
 public interface PrinterRepository extends JpaRepository<Printer, UUID> {
     List<Printer> findByStatusInOrderByNameAsc(List<PrinterStatus> statuses);
+    List<Printer> findByActiveTrueAndStatusInOrderByNameAsc(List<PrinterStatus> statuses);
 }

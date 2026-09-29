@@ -34,6 +34,13 @@ public class RazorpayService {
             .body(Map.of("amount", amountMinor, "currency", "INR", "receipt", receipt, "payment_capture", 1))
             .retrieve().body(Map.class);
     }
+    public Map<String, Object> refund(String paymentId, long amountMinor, String reason) {
+        requireConfigured();
+        return client.post().uri("/payments/{paymentId}/refund", paymentId).headers(headers -> headers.setBasicAuth(keyId, keySecret))
+            .contentType(MediaType.APPLICATION_JSON)
+            .body(Map.of("amount", amountMinor, "speed", "normal", "notes", Map.of("reason", reason)))
+            .retrieve().body(Map.class);
+    }
 
     public boolean verifyPayment(String orderId, String paymentId, String signature) {
         requireConfigured();
