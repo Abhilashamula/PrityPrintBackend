@@ -38,9 +38,15 @@ public class PrintOrderService {
         User user = userId == null ? null : users.findById(userId).orElseThrow(() -> new IllegalArgumentException("User not found"));
         Printer printer = printers.findById(request.printerId()).orElseThrow(() -> new IllegalArgumentException("Printer not found"));
         if (!printer.isActive() || (printer.getStatus() != PrinterStatus.ONLINE && printer.getStatus() != PrinterStatus.BUSY)) throw new IllegalStateException("Selected printer is unavailable");
+        if (orientation.equals("LANDSCAPE") && "EPSON_CONNECT".equals(printer.getProvider())) {
+            throw new IllegalArgumentException("Landscape orientation is not available for Epson Connect printing yet");
+        }
         Document document = documents.findById(request.documentId()).orElseThrow(() -> new IllegalArgumentException("Document not found"));
         if (document.getUser() != null && (userId == null || !document.getUser().getId().equals(userId))) throw new IllegalArgumentException("Document does not belong to this user");
         String pageRange = normalizePageRange(request.pageRange(), document.getPageCount());
+        if (pageRange != null && "EPSON_CONNECT".equals(printer.getProvider())) {
+            throw new IllegalArgumentException("Custom page ranges are not available for Epson Connect printing yet");
+        }
         int selectedPages = pageRange == null ? document.getPageCount() : countPages(pageRange);
         PrinterMediaConfig selected = selectMedia(printer.getId(), request);
         if (request.duplex() && !selected.isDuplexSupported()) throw new IllegalArgumentException("Duplex printing is not supported for the selected media");

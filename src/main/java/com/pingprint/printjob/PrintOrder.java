@@ -32,6 +32,7 @@ public class PrintOrder {
     @Column(nullable = false, length = 3) private String currency;
     @Column(nullable = false, length = 24) private String status;
     @Column(name = "payment_status", nullable = false, length = 24) private String paymentStatus;
+    @Column(name = "order_type", nullable = false, length = 16) private String orderType;
     @Column(name = "created_at", nullable = false) private Instant createdAt;
     @Column(name = "paid_at") private Instant paidAt;
     @Column(name = "completed_at") private Instant completedAt;
@@ -44,7 +45,13 @@ public class PrintOrder {
         this.user = user; this.printer = printer; this.document = document; this.fileName = document.getOriginalFileName(); this.fileStorageKey = document.getStorageKey();
         this.mediaConfig = mediaConfig; this.paperSource = mediaConfig.getPaperSource(); this.paperSize = mediaConfig.getPaperSize(); this.paperType = mediaConfig.getPaperType(); this.printQuality = mediaConfig.getPrintQuality();
         this.totalPages = totalPages; this.pageRange = pageRange; this.copies = copies; this.colorMode = colorMode;
-        this.duplex = duplex; this.orientation = orientation; this.amountMinor = amountMinor; this.currency = "INR"; this.status = "PAYMENT_PENDING"; this.paymentStatus = "PENDING"; this.createdAt = Instant.now();
+        this.duplex = duplex; this.orientation = orientation; this.amountMinor = amountMinor; this.currency = "INR"; this.status = "PAYMENT_PENDING"; this.paymentStatus = "PENDING"; this.orderType = "STUDENT"; this.createdAt = Instant.now();
+    }
+    public static PrintOrder test(Printer printer, Document document, PrinterMediaConfig mediaConfig) {
+        PrintOrder order = new PrintOrder(null, printer, document, mediaConfig, 1,
+            mediaConfig.isColorSupported() ? "COLOR" : "BW", false, "PORTRAIT", null, 1, 0);
+        order.status = "PAID"; order.paymentStatus = "NOT_REQUIRED"; order.orderType = "TEST"; order.paidAt = Instant.now();
+        return order;
     }
 
     public UUID getId() { return id; }
@@ -68,6 +75,7 @@ public class PrintOrder {
     public boolean isDuplex() { return duplex; }
     public String getOrientation() { return orientation; }
     public String getRazorpayOrderId() { return razorpayOrderId; }
+    public String getOrderType() { return orderType; }
     public void setRazorpayOrderId(String value) { razorpayOrderId = value; }
     public void setRazorpayPaymentId(String value) { razorpayPaymentId = value; }
     public void markPaid() { if (!"CAPTURED".equals(paymentStatus)) { paymentStatus = "CAPTURED"; paidAt = Instant.now(); } if (status.equals("PAYMENT_PENDING") || status.equals("CREATED")) status = "PAID"; }

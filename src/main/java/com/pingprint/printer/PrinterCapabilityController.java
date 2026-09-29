@@ -16,6 +16,9 @@ public class PrinterCapabilityController {
     @GetMapping("/api/admin/printers/{printerId}/media")
     public List<PrinterCapabilityService.ConfigureMedia> media(@PathVariable UUID printerId) { return service.adminMedia(printerId); }
 
+    @GetMapping("/api/admin/printers/{printerId}/supported-media")
+    public List<PrinterCapabilityService.SupportedMedia> supportedMedia(@PathVariable UUID printerId) { return service.supportedMedia(printerId); }
+
     @PutMapping("/api/admin/printers/{printerId}/media")
     public PrinterCapabilityService.ConfigureMedia configure(@PathVariable UUID printerId, @Valid @RequestBody PrinterCapabilityService.ConfigureMedia request) { return service.configure(printerId, request); }
 }

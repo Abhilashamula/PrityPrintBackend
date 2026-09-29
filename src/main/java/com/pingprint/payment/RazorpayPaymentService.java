@@ -43,18 +43,21 @@ public class RazorpayPaymentService {
         if (!userId.equals(order.getUserId())) throw new org.springframework.security.access.AccessDeniedException("Order does not belong to this user");
         PaymentTransaction transaction = transactions.findByProviderAndProviderPaymentId(PROVIDER, paymentId).orElseGet(() -> transactions.findByProviderAndProviderOrderId(PROVIDER, providerOrderId).orElseThrow(() -> new IllegalArgumentException("Payment transaction not found")));
         if (!providerOrderId.equals(transaction.getProviderOrderId()) || !order.getId().equals(transaction.getOrderId())) throw new IllegalArgumentException("Payment does not belong to this order");
-        if (!transaction.getStatus().equals("CAPTURED")) { transaction.capture(paymentId); transactions.save(transaction); }
+        if (!transaction.getStatus().equals("CAPTURED")) { transaction.linkPayment(paymentId); transactions.save(transaction); }
         order.setRazorpayPaymentId(paymentId);
         orders.save(order);
-        return Map.of("verified", true, "status", "captured", "orderId", order.getId());
+        String status = transaction.getStatus().equals("CAPTURED") ? "captured" : "pending_confirmation";
+        return Map.of("verified", true, "status", status, "orderId", order.getId());
     }
 
     @Transactional
     public void webhook(String payload) {
         try {
             JsonNode root = json.readTree(payload);
-            String eventId = root.path("payload").path("payment").path("entity").path("id").asText(root.path("id").asText());
             String event = root.path("event").asText();
+            String paymentEntityId = root.path("payload").path("payment").path("entity").path("id").asText();
+            if (event.isBlank() || paymentEntityId.isBlank()) return;
+            String eventId = root.path("id").asText(event + ":" + paymentEntityId);
             if (eventId.isBlank() || !claimEvent(eventId, event)) return;
             JsonNode payment = root.path("payload").path("payment").path("entity");
             String providerOrderId = payment.path("order_id").asText();

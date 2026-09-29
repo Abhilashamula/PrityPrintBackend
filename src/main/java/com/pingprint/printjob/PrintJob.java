@@ -45,6 +45,7 @@ public class PrintJob {
     public String getProvider() { return provider; }
     public String getProviderJobId() { return providerJobId; }
     public Instant getClaimedAt() { return claimedAt; }
+    public int getAttemptCount() { return attemptCount; }
     public void claim(String workerId) { status = "SUBMITTING"; claimedBy = workerId; claimedAt = Instant.now(); startedAt = startedAt == null ? claimedAt : startedAt; attemptCount++; touch(); }
     public void recordProviderJob(String jobId) { providerJobId = jobId; touch(); }
     public void submitted() { status = "SUBMITTED"; failureReason = null; touch(); }

@@ -2,7 +2,6 @@ package com.pingprint.printer;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.util.*;
@@ -13,15 +12,14 @@ public class PrinterCapabilityService {
     private final PrinterMediaConfigRepository media;
     private final PrinterProviderConnectionRepository connections;
     private final ObjectMapper json;
-    private final JdbcTemplate db;
-
     public record MediaOption(UUID id, String paperSize, String paperType, List<String> colorModes, boolean duplexSupported, long priceBwMinor, long priceColorMinor) { }
-    public record Capabilities(UUID printerId, boolean available, List<MediaOption> mediaOptions) { }
+    public record Capabilities(UUID printerId, boolean available, boolean pageRangeSupported, boolean landscapeSupported, List<MediaOption> mediaOptions) { }
+    public record SupportedMedia(String paperSource, String paperSize, String paperType, String printQuality, boolean borderless, boolean duplexSupported, boolean colorSupported, boolean monoSupported) { }
     public record ConfigureMedia(UUID id, String paperSource, String paperSize, String paperType, String printQuality, boolean borderless,
                                  boolean duplexSupported, boolean colorSupported, boolean monoSupported, boolean enabled, long priceBwMinor, long priceColorMinor) { }
 
-    public PrinterCapabilityService(PrinterRepository printers, PrinterMediaConfigRepository media, PrinterProviderConnectionRepository connections, ObjectMapper json, JdbcTemplate db) {
-        this.printers = printers; this.media = media; this.connections = connections; this.json = json; this.db = db;
+    public PrinterCapabilityService(PrinterRepository printers, PrinterMediaConfigRepository media, PrinterProviderConnectionRepository connections, ObjectMapper json) {
+        this.printers = printers; this.media = media; this.connections = connections; this.json = json;
     }
     public Capabilities studentCapabilities(UUID printerId) {
         Printer printer = printers.findById(printerId).orElseThrow(() -> new IllegalArgumentException("Printer not found"));
@@ -31,10 +29,24 @@ public class PrinterCapabilityService {
             return new MediaOption(item.getId(), displayValue(item.getPaperSize(), "ps_"), displayValue(item.getPaperType(), "pt_"), colors,
                 item.isDuplexSupported(), item.getPriceBwMinor(), item.getPriceColorMinor());
         }).toList();
-        return new Capabilities(printerId, available && !options.isEmpty(), options);
+        boolean epsonConnect = "EPSON_CONNECT".equals(printer.getProvider());
+        return new Capabilities(printerId, available && !options.isEmpty(), !epsonConnect, !epsonConnect, options);
     }
     public List<ConfigureMedia> adminMedia(UUID printerId) {
         return media.findByPrinterIdOrderByPaperSizeAscPaperTypeAsc(printerId).stream().map(this::dto).toList();
+    }
+    public List<SupportedMedia> supportedMedia(UUID printerId) {
+        String raw = connections.findByPrinterId(printerId).map(PrinterProviderConnection::getCapabilitiesJson)
+            .orElseThrow(() -> new IllegalStateException("Connect Epson and refresh capabilities first"));
+        try {
+            JsonNode root = json.readTree(raw); List<SupportedMedia> result = new ArrayList<>();
+            boolean color = contains(root.path("colorModes"), "color"); boolean mono = contains(root.path("colorModes"), "mono");
+            for (JsonNode size : root.path("paperSizes")) for (JsonNode type : size.path("paperTypes"))
+                for (JsonNode source : type.path("paperSources")) for (JsonNode quality : type.path("printQualities"))
+                    result.add(new SupportedMedia(source.asText(), size.path("paperSize").asText(), type.path("paperType").asText(), quality.asText(),
+                        type.path("borderless").asBoolean(false), type.path("doubleSided").asBoolean(false), color, mono));
+            return result;
+        } catch (Exception error) { throw new IllegalStateException("Stored Epson capabilities are invalid", error); }
     }
     @Transactional
     public ConfigureMedia configure(UUID printerId, ConfigureMedia request) {
@@ -45,6 +57,11 @@ public class PrinterCapabilityService {
             ? new PrinterMediaConfig(printer, required(request.paperSource(), "Paper source"), required(request.paperSize(), "Paper size"), required(request.paperType(), "Paper type"), required(request.printQuality(), "Print quality"))
             : media.findById(request.id()).filter(value -> value.getPrinterId().equals(printerId)).orElseThrow(() -> new IllegalArgumentException("Media configuration not found"));
         item.configure(request.enabled(), request.duplexSupported(), request.colorSupported(), request.monoSupported(), request.borderless(), request.priceBwMinor(), request.priceColorMinor(), request.printQuality());
+        if (request.enabled()) {
+            for (PrinterMediaConfig other : media.findByPrinterIdAndPaperSourceAndEnabledTrue(printerId, item.getPaperSource())) {
+                if (!other.getId().equals(item.getId())) { other.disable(); media.save(other); }
+            }
+        }
         return dto(media.save(item));
     }
     private void validateEpsonCapability(UUID printerId, ConfigureMedia request) {

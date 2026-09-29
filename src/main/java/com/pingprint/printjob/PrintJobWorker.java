@@ -11,6 +11,7 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import com.pingprint.payment.PaymentRefundService;
+import org.springframework.beans.factory.annotation.Value;
 
 @Service
 public class PrintJobWorker {
@@ -19,9 +20,12 @@ public class PrintJobWorker {
     private final Map<String, PrintProvider> providers;
     private final String workerId;
     private final PaymentRefundService refunds;
-    public PrintJobWorker(PrintJobClaimService claims, PrintJobRepository jobs, Collection<PrintProvider> providers, PaymentRefundService refunds) {
+    private final int maxAttempts;
+    public PrintJobWorker(PrintJobClaimService claims, PrintJobRepository jobs, Collection<PrintProvider> providers, PaymentRefundService refunds,
+                          @Value("${app.print-worker.max-attempts:3}") int maxAttempts) {
         this.claims = claims; this.jobs = jobs; this.providers = providers.stream().collect(Collectors.toMap(PrintProvider::providerName, Function.identity()));
         this.refunds = refunds;
+        this.maxAttempts = Math.max(1, maxAttempts);
         this.workerId = host() + "-" + UUID.randomUUID();
     }
     @Scheduled(fixedDelayString = "${app.print-worker.delay-ms:2000}")
@@ -43,7 +47,14 @@ public class PrintJobWorker {
         PrintProvider provider = providers.get(job.getProvider());
         if (provider == null) { job.failed("No print provider is registered for " + job.getProvider()); jobs.save(job); return; }
         try { provider.submit(job); }
-        catch (IllegalStateException error) { job.requeue(error.getMessage(), 60); jobs.save(job); }
+        catch (IllegalStateException error) {
+            if (job.getAttemptCount() >= maxAttempts) {
+                job.failed("Submission could not start after " + maxAttempts + " attempts: " + error.getMessage());
+                jobs.save(job); refunds.initiateForDefinitePrintFailure(job.getOrder().getId(), error.getMessage());
+            } else {
+                job.requeue(error.getMessage(), Math.min(300, 30L * job.getAttemptCount())); jobs.save(job);
+            }
+        }
         catch (ProviderException error) {
             if (error.isAmbiguous()) job.unknown(error.getMessage());
             else job.failed(error.getMessage());

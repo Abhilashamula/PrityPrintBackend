@@ -28,9 +28,16 @@ services:
       JWT_SECRET: local-development-secret-change-this-value-123456789
       FRONTEND_URL: http://localhost:5173,http://localhost:5174
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
       RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:-}
       RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:-}
       RAZORPAY_WEBHOOK_SECRET: ${RAZORPAY_WEBHOOK_SECRET:-}
+      EPSON_API_KEY: ${EPSON_API_KEY:-}
+      EPSON_CLIENT_ID: ${EPSON_CLIENT_ID:-}
+      EPSON_CLIENT_SECRET: ${EPSON_CLIENT_SECRET:-}
+      EPSON_REDIRECT_URI: ${EPSON_REDIRECT_URI:-http://localhost:8080/api/epson/oauth/callback}
+      TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY:-}
       REQUIRE_EMAIL_VERIFICATION: "false"
       PORT: 8080
     ports:

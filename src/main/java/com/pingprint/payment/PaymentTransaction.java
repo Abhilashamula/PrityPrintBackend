@@ -34,6 +34,7 @@ public class PaymentTransaction {
     public UUID getOrderId() { return order.getId(); }
     public long getAmountMinor() { return amountMinor; }
     public String getRefundId() { return refundId; }
+    public void linkPayment(String paymentId) { providerPaymentId = paymentId; updatedAt = Instant.now(); }
     public void capture(String paymentId) { providerPaymentId = paymentId; status = "CAPTURED"; updatedAt = Instant.now(); }
     public void fail(String reason) { status = "FAILED"; failureReason = reason; updatedAt = Instant.now(); }
     public void refund(String id, long amount, String reason) { refundId = id; refundAmountMinor = amount; refundReason = reason; status = "REFUNDED"; refundedAt = Instant.now(); updatedAt = refundedAt; order.markRefunded(); }

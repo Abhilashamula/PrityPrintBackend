@@ -78,7 +78,7 @@ public class EpsonConnectClient {
         } catch (HttpStatusCodeException error) { throw new ProviderException("Epson rejected the document upload", false, error); }
         catch (ResourceAccessException error) { throw new ProviderException("Epson document upload timed out", false, error); }
     }
-    public void execute(String token, String jobId) { post("/printing/jobs/" + jobId + "/print", token, Map.of(), true); }
+    public void execute(String token, String jobId) { postEmpty("/printing/jobs/" + jobId + "/print", token, true); }
     public JsonNode jobInfo(String token, String jobId) { return get("/printing/jobs/" + jobId, token); }
 
     private TokenResponse token(LinkedMultiValueMap<String, String> form) {
@@ -99,6 +99,13 @@ public class EpsonConnectClient {
         requireConfigured();
         try { return client.post().uri(apiBase + path).headers(h -> { h.setBearerAuth(token); h.set("x-api-key", apiKey); })
             .contentType(MediaType.APPLICATION_JSON).body(body).retrieve().body(JsonNode.class); }
+        catch (HttpStatusCodeException error) { throw new ProviderException("Epson request was rejected: " + error.getStatusCode(), false, error); }
+        catch (ResourceAccessException error) { throw new ProviderException("Epson request timed out", ambiguousOnTimeout, error); }
+    }
+    private void postEmpty(String path, String token, boolean ambiguousOnTimeout) {
+        requireConfigured();
+        try { client.post().uri(apiBase + path).headers(h -> { h.setBearerAuth(token); h.set("x-api-key", apiKey); })
+            .retrieve().toBodilessEntity(); }
         catch (HttpStatusCodeException error) { throw new ProviderException("Epson request was rejected: " + error.getStatusCode(), false, error); }
         catch (ResourceAccessException error) { throw new ProviderException("Epson request timed out", ambiguousOnTimeout, error); }
     }

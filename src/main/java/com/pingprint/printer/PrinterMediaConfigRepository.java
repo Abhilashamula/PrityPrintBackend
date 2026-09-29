@@ -9,4 +9,5 @@ public interface PrinterMediaConfigRepository extends JpaRepository<PrinterMedia
     List<PrinterMediaConfig> findByPrinterIdOrderByPaperSizeAscPaperTypeAsc(UUID printerId);
     List<PrinterMediaConfig> findByPrinterIdAndEnabledTrueOrderByPaperSizeAscPaperTypeAsc(UUID printerId);
     Optional<PrinterMediaConfig> findByIdAndPrinterIdAndEnabledTrue(UUID id, UUID printerId);
+    List<PrinterMediaConfig> findByPrinterIdAndPaperSourceAndEnabledTrue(UUID printerId, String paperSource);
 }

@@ -41,6 +41,7 @@ public class PrinterMediaConfig {
     public boolean isEnabled() { return enabled; }
     public Long getPriceBwMinor() { return priceBwMinor; }
     public Long getPriceColorMinor() { return priceColorMinor; }
+    public void disable() { enabled = false; updatedAt = Instant.now(); }
     public void configure(boolean enabled, boolean duplex, boolean color, boolean mono, boolean borderless, long bw, long colorPrice, String quality) {
         this.enabled = enabled; duplexSupported = duplex; colorSupported = color; monoSupported = mono; this.borderless = borderless;
         priceBwMinor = bw; priceColorMinor = colorPrice; printQuality = quality; updatedAt = Instant.now();

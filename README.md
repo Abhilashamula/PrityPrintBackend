@@ -1,120 +1,112 @@
 # Ping & Print backend
 
-Spring Boot API for user accounts, email verification, wallet accounting, print orders, and future PayPal payments.
-
-## Why this stack
-
-- Spring Boot matches the team's Java/Spring experience and gives strong validation/security defaults.
-- PostgreSQL is a good fit for users, orders, and money because transactions and row locks matter.
-- Flyway keeps schema changes versioned.
-- JWT access tokens keep the kiosk frontend stateless; passwords are stored only as BCrypt hashes.
-- PayPal should be called only from this API. Never expose PayPal secrets in Vite variables.
+Spring Boot 3 API for authenticated document upload, server-priced print orders,
+Razorpay payments, and durable cloud printing through a provider abstraction.
+The first cloud provider is Epson Connect API v2; existing `LOCAL_AGENT` printer
+records remain supported and are not routed through Epson.
 
 ## Prerequisites
 
-- Java 17 or newer
-- Maven 3.9 or newer
-- Docker Desktop
+- Java 17 and Maven 3.9, or Docker Desktop
+- PostgreSQL 15+
+- Razorpay test credentials and webhook secret
+- Epson Connect API v2 application credentials for real cloud printing
 
-The repository also includes a Docker path, so Java and Maven do not need to be installed on the host machine.
+## Local startup
 
-## Run locally
+Create a `.env` beside `docker-compose.yml` (it is ignored by Git):
+
+```env
+JWT_SECRET=replace-with-at-least-32-random-bytes
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=replace-this-password
+TOKEN_ENCRYPTION_KEY=replace-with-a-base64-encoded-32-byte-key
+
+RAZORPAY_KEY_ID=rzp_test_replace_me
+RAZORPAY_KEY_SECRET=replace_me
+RAZORPAY_WEBHOOK_SECRET=replace_me
+
+EPSON_API_KEY=replace_me
+EPSON_CLIENT_ID=replace_me
+EPSON_CLIENT_SECRET=replace_me
+EPSON_REDIRECT_URI=http://localhost:8080/api/epson/oauth/callback
+FRONTEND_URL=http://localhost:5173
+```
+
+Generate the token-encryption key in PowerShell:
+
+```powershell
+[Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(32))
+```
+
+Start PostgreSQL and the API:
 
 ```powershell
 docker compose up --build
-```
-
-The API starts at `http://localhost:8080`.
-
-PostgreSQL is available to pgAdmin at:
-
-- Host: `localhost`
-- Port: `5432`
-- Database: `pingprint`
-- Username: `pingprint`
-- Password: `pingprint_dev_only`
-
-For a real pgAdmin-managed PostgreSQL installation instead, stop the Compose database service and set `DATABASE_URL`, `DATABASE_USERNAME`, and `DATABASE_PASSWORD` from your pgAdmin connection before starting the backend.
-
-To run the backend container against PostgreSQL installed on Windows, create the `pingprint` database in pgAdmin, then run:
-
-```powershell
-$env:DATABASE_USERNAME = "postgres"
-$env:DATABASE_PASSWORD = "your-password"
-docker compose -f docker-compose.external-db.yml up --build -d
-```
-
-The external database must allow connections from Docker Desktop. The compose file uses `host.docker.internal` instead of `localhost` because `localhost` inside a container refers to the container itself.
-
-Verify startup with:
-
-```powershell
 Invoke-RestMethod http://localhost:8080/api/health
 ```
 
-## Initial endpoints
+Flyway applies the existing V1-V9 migrations automatically. Do not edit applied
+migrations. Documents are stored under the configured private storage directory;
+the API does not publish permanent document URLs.
 
-- `POST /api/auth/signup` - create account with name, age, gender, phone, and email
-- `POST /api/auth/login` - receive a JWT after email verification
-- `POST /api/auth/verify-email` - verify a signup token
-- `GET /api/auth/me` - get the authenticated profile
-- `GET /api/wallet` - get authenticated wallet balance and recent transactions
-- `POST /api/print/guest-session` - create a print session without an account
-- `GET /api/print/guest-session/{sessionId}` - read a guest session
-- `POST /api/payments/paypal/create-order` - reserved for server-side PayPal order creation
-- `POST /api/payments/paypal/webhook` - reserved for verified PayPal webhook events (currently disabled)
+## Frontend configuration
 
-Example signup:
-
-```json
-{
-  "email": "student@example.com",
-  "password": "a-strong-password",
-  "name": "Student",
-  "age": 20,
-  "gender": "prefer_not_to_say",
-  "phone": "+919876543210"
-}
-```
-
-Login returns:
-
-```json
-{
-  "accessToken": "jwt-token",
-  "user": {
-    "id": "user-id",
-    "email": "student@example.com",
-    "name": "Student",
-    "age": 20,
-    "gender": "prefer_not_to_say",
-    "phone": "+919876543210",
-    "emailVerified": true,
-    "wallet": { "balanceMinor": 0, "currency": "INR" }
-  }
-}
-```
-
-Send the token on protected requests:
-
-```http
-Authorization: Bearer jwt-token
-```
-
-Guest users can continue printing through `/api/print/guest-session`; they do not receive a user JWT or wallet. Payment and actual document upload should be attached to the returned session in the next print-order slice.
-
-## Frontend connection
-
-Add this to the frontend `.env`:
+Use these values in the frontend `.env`:
 
 ```env
 VITE_API_URL=http://localhost:8080/api
+VITE_RAZORPAY_KEY_ID=rzp_test_replace_me
 ```
 
-The frontend should call `/auth/signup`, verify the token delivered by your email provider, then call `/auth/login`. Keep the returned access token in memory, send it as `Authorization: Bearer <token>`, and call `/auth/me` on app startup. Use an httpOnly refresh cookie before production; localStorage is not recommended for long-lived tokens on a shared kiosk. During local development the verification token is logged by the backend until an email provider is configured.
+Only the Razorpay key ID belongs in the browser. Razorpay secrets, Epson
+credentials, Epson access/refresh tokens, and Epson upload URIs stay on the API.
 
-For Google sign-up, create a Google OAuth Web client ID with `http://localhost:5173` as an authorized JavaScript origin, then set `VITE_GOOGLE_CLIENT_ID` in the frontend and `GOOGLE_CLIENT_ID` in the backend environment. The backend verifies the Google ID token before issuing the Ping &amp; Print JWT. Google does not reliably provide age, gender, or phone, so the signup form collects those fields before the Google button is used.
+## Epson onboarding
 
-## Payment design
+1. Log in to the existing admin dashboard.
+2. Add a printer with provider `EPSON_CONNECT`.
+3. Select it and choose **Connect Epson**.
+4. Complete Epson authorization. The callback stores encrypted tokens and loads
+   device information and document capabilities.
+5. Choose **Refresh capabilities**, then configure currently loaded media. Media
+   choices come from Epson's response; source identifiers are never invented.
+6. Set per-page B&W/color prices and enable only media physically loaded now.
+7. Use **Test connection**, then enable the printer.
 
-PayPal order creation and capture must happen on this backend. The browser starts a payment session, the backend creates the PayPal order, and the backend verifies the webhook/capture before crediting the wallet. Wallet balance changes must be transactional and idempotent.
+For the EcoTank L18050, configure its actual rear-feed media one combination at a
+time. Duplex, landscape, and custom page ranges are not advertised for the Epson
+path unless a verified implementation is added later.
+
+## Payment and print lifecycle
+
+The API creates the internal order and authoritative amount before Razorpay
+Checkout. Browser signature verification links the payment, while a verified
+`payment.captured` webhook marks the order paid and creates at most one print
+job. The database-backed worker claims queued jobs transactionally, creates one
+Epson job, uploads the private document, executes printing, and polls provider
+status. Ambiguous create/execute timeouts become `STATUS_UNKNOWN`; they are not
+blindly retried or automatically refunded.
+
+Configure Razorpay's webhook URL as:
+
+```text
+https://your-api.example.com/api/payments/razorpay/webhook
+```
+
+Subscribe at minimum to payment captured/failed and refund events supported by
+the account. The webhook URL must be publicly reachable over HTTPS.
+
+## Verification
+
+```powershell
+docker run --rm -v pingprint-m2:/root/.m2 -v "${PWD}:/workspace" -w /workspace maven:3.9.9-eclipse-temurin-17 mvn -B test
+```
+
+Before production, run a controlled Razorpay test payment and a one-page PDF on
+the authorized physical printer. Confirm exactly one `payment_transactions` row,
+one internal `print_jobs` row, and one Epson provider job ID for the order.
+
+Production also needs HTTPS, managed secret storage, database backups, private
+document retention/deletion policy, log monitoring, and malware scanning if files
+come from users outside the trusted campus population.

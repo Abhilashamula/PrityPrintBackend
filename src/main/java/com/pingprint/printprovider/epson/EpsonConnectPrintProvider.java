@@ -31,7 +31,7 @@ public class EpsonConnectPrintProvider implements PrintProvider {
         settings.put("borderless", false); settings.put("printQuality", order.getPrintQuality()); settings.put("paperSource", order.getPaperSource());
         settings.put("colorMode", order.getColorMode().equals("COLOR") ? "color" : "mono"); settings.put("copies", order.getCopies());
         settings.put("doubleSided", order.isDuplex());
-        if (order.getPageRange() != null) settings.put("pageRange", order.getPageRange());
+        if (order.getPageRange() != null) throw new ProviderException("Page-range printing requires a server-side PDF extraction step and is not enabled for Epson Connect", false);
         Map<String, Object> request = Map.of("jobName", "PingPrint" + order.getId().toString().replace("-", ""), "printMode", "document", "printSettings", settings);
         EpsonConnectClient.CreatedJob created = client.createJob(token, request);
         job.recordProviderJob(created.jobId()); jobs.saveAndFlush(job);

@@ -16,6 +16,8 @@ public class Printer {
     @Column(length = 120) private String model;
     @Column(nullable = false, length = 32) private String provider;
     @Column(nullable = false) private boolean active;
+    @Column(nullable = false) private boolean archived;
+    @Column(name = "archived_at") private Instant archivedAt;
     @Column(name = "color_supported", nullable = false) private boolean colorSupported;
     @Column(name = "duplex_supported", nullable = false) private boolean duplexSupported;
     @Enumerated(EnumType.STRING) @Column(nullable = false, length = 24) private PrinterStatus status;
@@ -25,7 +27,7 @@ public class Printer {
     protected Printer() { }
     public Printer(String name, String location, String agentKeyHash) {
         this.name = name; this.location = location; this.agentKeyHash = agentKeyHash;
-        this.colorSupported = true; this.duplexSupported = false; this.provider = "LOCAL_AGENT"; this.active = true;
+        this.colorSupported = true; this.duplexSupported = false; this.provider = "LOCAL_AGENT"; this.active = true; this.archived = false;
         this.status = PrinterStatus.OFFLINE; this.createdAt = Instant.now(); this.updatedAt = createdAt;
     }
     public static Printer cloud(String name, String location, String provider) {
@@ -40,6 +42,7 @@ public class Printer {
     public String getModel() { return model; }
     public String getProvider() { return provider; }
     public boolean isActive() { return active; }
+    public boolean isArchived() { return archived; }
     public PrinterStatus getStatus() { return status; }
     public boolean isColorSupported() { return colorSupported; }
     public boolean isDuplexSupported() { return duplexSupported; }
@@ -50,6 +53,8 @@ public class Printer {
         this.updatedAt = Instant.now();
     }
     public void updateDetails(String name, String location, boolean active) {
+        if (archived && active) throw new IllegalStateException("Archived printers cannot be enabled");
         this.name = name; this.location = location; this.active = active; this.updatedAt = Instant.now();
     }
+    public void archive() { this.active = false; this.archived = true; this.archivedAt = Instant.now(); this.updatedAt = archivedAt; }
 }

@@ -29,10 +29,32 @@ server:
 app:
   frontend-url: ${FRONTEND_URL:http://localhost:5173,http://localhost:5174}
   google-client-id: ${GOOGLE_CLIENT_ID:}
+  admin:
+    username: ${ADMIN_USERNAME:admin}
+    password: ${ADMIN_PASSWORD:admin}
   razorpay:
     key-id: ${RAZORPAY_KEY_ID:}
     key-secret: ${RAZORPAY_KEY_SECRET:}
     webhook-secret: ${RAZORPAY_WEBHOOK_SECRET:}
+  token-encryption-key: ${TOKEN_ENCRYPTION_KEY:}
+  storage:
+    documents-path: ${DOCUMENTS_PATH:./data/documents}
+    retention-hours: ${DOCUMENT_RETENTION_HOURS:24}
+    cleanup-delay-ms: ${DOCUMENT_CLEANUP_DELAY_MS:3600000}
+  epson:
+    api-key: ${EPSON_API_KEY:}
+    client-id: ${EPSON_CLIENT_ID:}
+    client-secret: ${EPSON_CLIENT_SECRET:}
+    redirect-uri: ${EPSON_REDIRECT_URI:}
+    api-base: ${EPSON_API_BASE:https://api.epsonconnect.com/api/2}
+    auth-base: ${EPSON_AUTH_BASE:https://auth.epsonconnect.com/auth}
+    connect-timeout-ms: ${EPSON_CONNECT_TIMEOUT_MS:5000}
+    read-timeout-ms: ${EPSON_READ_TIMEOUT_MS:20000}
+  print-worker:
+    delay-ms: ${PRINT_WORKER_DELAY_MS:2000}
+    status-delay-ms: ${PRINT_STATUS_DELAY_MS:10000}
+    recovery-delay-ms: ${PRINT_RECOVERY_DELAY_MS:60000}
+    max-attempts: ${PRINT_WORKER_MAX_ATTEMPTS:3}
   jwt:
     secret: ${JWT_SECRET:change-this-development-secret-to-a-long-random-value}
     expiration-minutes: ${JWT_EXPIRATION_MINUTES:60}

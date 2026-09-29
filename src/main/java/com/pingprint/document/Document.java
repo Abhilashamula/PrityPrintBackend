@@ -18,6 +18,7 @@ public class Document {
     @Column(name = "byte_size", nullable = false) private long byteSize;
     @Column(name = "page_count", nullable = false) private int pageCount;
     @Column(name = "created_at", nullable = false) private Instant createdAt;
+    @Column(name = "deleted_at") private Instant deletedAt;
 
     protected Document() { }
 
@@ -32,4 +33,6 @@ public class Document {
     public String getContentType() { return contentType; }
     public long getByteSize() { return byteSize; }
     public int getPageCount() { return pageCount; }
+    public Instant getDeletedAt() { return deletedAt; }
+    public void markDeleted() { deletedAt = Instant.now(); }
 }

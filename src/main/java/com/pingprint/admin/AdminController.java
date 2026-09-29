@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.HexFormat;
+import org.springframework.beans.factory.annotation.Value;
 
 @RestController
 @RequestMapping("/api/admin")
@@ -24,8 +25,17 @@ public class AdminController {
     private final PrinterRepository printers;
     private final JdbcTemplate db;
     private final PrinterProviderConnectionRepository connections;
+    private final String adminUsername;
+    private final String adminPassword;
+    private final AdminOperationsService operations;
 
-    public AdminController(JwtService jwt, PrinterRepository printers, JdbcTemplate db, PrinterProviderConnectionRepository connections) { this.jwt = jwt; this.printers = printers; this.db = db; this.connections = connections; }
+    public AdminController(JwtService jwt, PrinterRepository printers, JdbcTemplate db, PrinterProviderConnectionRepository connections,
+                           @Value("${app.admin.username}") String adminUsername, @Value("${app.admin.password}") String adminPassword,
+                           AdminOperationsService operations) {
+        this.jwt = jwt; this.printers = printers; this.db = db; this.connections = connections;
+        this.adminUsername = adminUsername; this.adminPassword = adminPassword;
+        this.operations = operations;
+    }
 
     public record LoginRequest(@NotBlank String username, @NotBlank String password) { }
     public record AddPrinterRequest(@NotBlank String name, @NotBlank String location, String provider, String agentKey) { }
@@ -35,7 +45,9 @@ public class AdminController {
 
     @PostMapping("/login")
     public Map<String, String> login(@Valid @RequestBody LoginRequest request) {
-        if (!"admin".equals(request.username()) || !"admin".equals(request.password())) throw new IllegalArgumentException("Invalid admin credentials");
+        boolean usernameMatches = MessageDigest.isEqual(adminUsername.getBytes(StandardCharsets.UTF_8), request.username().getBytes(StandardCharsets.UTF_8));
+        boolean passwordMatches = MessageDigest.isEqual(adminPassword.getBytes(StandardCharsets.UTF_8), request.password().getBytes(StandardCharsets.UTF_8));
+        if (!usernameMatches || !passwordMatches) throw new IllegalArgumentException("Invalid admin credentials");
         return Map.of("accessToken", jwt.issueAdmin(), "role", "ADMIN");
     }
 
@@ -49,18 +61,19 @@ public class AdminController {
         String provider = request.provider() == null || request.provider().isBlank() ? "EPSON_CONNECT" : request.provider().toUpperCase();
         Printer printer;
         if (provider.equals("LOCAL_AGENT")) {
-            if (request.agentKey() == null || request.agentKey().isBlank()) throw new IllegalArgumentException("Agent key is required for local-agent printers");
-            printer = new Printer(request.name().trim(), request.location().trim(), hash(request.agentKey()));
+            throw new IllegalArgumentException("LOCAL_AGENT is not available because this repository has no compatible local print provider");
         } else if (provider.equals("EPSON_CONNECT")) printer = Printer.cloud(request.name().trim(), request.location().trim(), provider);
         else throw new IllegalArgumentException("Unsupported print provider");
-        return printerView(printers.save(printer));
+        printer = printers.save(printer); operations.audit("PRINTER_CREATED", "PRINTER", printer.getId(), "Created printer " + printer.getName());
+        return printerView(printer);
     }
 
     @PutMapping("/printers/{id}")
     public Map<String, Object> updatePrinter(@PathVariable UUID id, @Valid @RequestBody UpdatePrinterRequest request) {
         Printer printer = printers.findById(id).orElseThrow(() -> new IllegalArgumentException("Printer not found"));
         printer.updateDetails(request.name().trim(), request.location().trim(), request.active());
-        return printerView(printers.save(printer));
+        printer = printers.save(printer); operations.audit("PRINTER_UPDATED", "PRINTER", printer.getId(), "Updated printer " + printer.getName());
+        return printerView(printer);
     }
 
     @PutMapping("/printers/{id}/status")
@@ -68,7 +81,16 @@ public class AdminController {
         Printer printer = printers.findById(id).orElseThrow(() -> new IllegalArgumentException("Printer not found"));
         printer.setStatus(PrinterStatus.valueOf(request.status().toUpperCase()));
         printers.save(printer);
+        operations.audit("PRINTER_STATUS_UPDATED", "PRINTER", printer.getId(), "Set status to " + printer.getStatus());
         return Map.of("id", printer.getId(), "status", printer.getStatus());
+    }
+
+    @PostMapping("/printers/{id}/archive")
+    public Map<String, Object> archive(@PathVariable UUID id) {
+        Printer printer = printers.findById(id).orElseThrow(() -> new IllegalArgumentException("Printer not found"));
+        printer.archive(); printers.save(printer);
+        operations.audit("PRINTER_ARCHIVED", "PRINTER", id, "Archived printer " + printer.getName());
+        return printerView(printer);
     }
 
     @GetMapping("/report")
@@ -98,6 +120,7 @@ public class AdminController {
         Map<String, Object> value = new java.util.LinkedHashMap<>();
         value.put("id", printer.getId()); value.put("name", printer.getName()); value.put("location", printer.getLocation());
         value.put("status", printer.getStatus()); value.put("active", printer.isActive()); value.put("provider", printer.getProvider());
+        value.put("archived", printer.isArchived());
         value.put("manufacturer", printer.getManufacturer()); value.put("model", printer.getModel());
         value.put("connectionState", connection == null ? "NOT_CONNECTED" : connection.isReauthorizationRequired() ? "REAUTHORIZATION_REQUIRED" : connection.isConnected() ? "CONNECTED" : "OFFLINE");
         return value;

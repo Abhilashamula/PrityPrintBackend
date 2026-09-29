@@ -13,6 +13,8 @@ import java.time.temporal.ChronoUnit;
 import java.util.Base64;
 import java.util.HexFormat;
 import java.util.UUID;
+import java.util.Map;
+import com.pingprint.admin.AdminOperationsService;
 
 @Service
 public class EpsonAuthService {
@@ -21,9 +23,10 @@ public class EpsonAuthService {
     private final PrinterRepository printers;
     private final PrinterProviderConnectionRepository connections;
     private final EpsonOAuthStateRepository states;
+    private final AdminOperationsService operations;
 
-    public EpsonAuthService(EpsonConnectClient client, TokenCipher cipher, PrinterRepository printers, PrinterProviderConnectionRepository connections, EpsonOAuthStateRepository states) {
-        this.client = client; this.cipher = cipher; this.printers = printers; this.connections = connections; this.states = states;
+    public EpsonAuthService(EpsonConnectClient client, TokenCipher cipher, PrinterRepository printers, PrinterProviderConnectionRepository connections, EpsonOAuthStateRepository states, AdminOperationsService operations) {
+        this.client = client; this.cipher = cipher; this.printers = printers; this.connections = connections; this.states = states; this.operations = operations;
     }
     @Transactional
     public String begin(UUID printerId) {
@@ -50,11 +53,12 @@ public class EpsonAuthService {
         connection.updateCapabilities(capabilities.toString());
         printer.updateDeviceInfo("Epson", device.path("productName").asText("Epson printer"), device.path("connected").asBoolean(false));
         connections.save(connection); printers.save(printer);
+        operations.audit("PRINTER_AUTHORIZED", "PRINTER", printer.getId(), "Authorized Epson device for " + printer.getName());
         return printer.getId();
     }
     @Transactional
     public String validAccessToken(UUID printerId) {
-        PrinterProviderConnection connection = connections.findByPrinterId(printerId).orElseThrow(() -> new IllegalStateException("Epson printer is not authorized"));
+        PrinterProviderConnection connection = connections.findByPrinterIdForUpdate(printerId).orElseThrow(() -> new IllegalStateException("Epson printer is not authorized"));
         if (connection.isReauthorizationRequired()) throw new IllegalStateException("Epson printer requires reauthorization");
         if (connection.getAccessTokenExpiresAt().isAfter(Instant.now().plusSeconds(90))) return cipher.decrypt(connection.getEncryptedAccessToken());
         if (connection.getRefreshTokenExpiresAt() != null && connection.getRefreshTokenExpiresAt().isBefore(Instant.now())) {
@@ -76,6 +80,16 @@ public class EpsonAuthService {
         PrinterProviderConnection connection = connections.findByPrinterId(printerId).orElseThrow(() -> new IllegalArgumentException("Epson connection not found"));
         connection.updateCapabilities(client.capabilities(validAccessToken(printerId), "document").toString());
         connections.save(connection);
+        operations.audit("CAPABILITIES_REFRESHED", "PRINTER", printerId, "Refreshed Epson document capabilities");
+    }
+    @Transactional
+    public Map<String, Object> testConnection(UUID printerId) {
+        JsonNode device = client.deviceInfo(validAccessToken(printerId));
+        Printer printer = printers.findById(printerId).orElseThrow(() -> new IllegalArgumentException("Printer not found"));
+        boolean connected = device.path("connected").asBoolean(false);
+        printer.updateDeviceInfo("Epson", device.path("productName").asText("Epson printer"), connected);
+        printers.save(printer);
+        return Map.of("reachable", true, "connected", connected, "productName", device.path("productName").asText(""));
     }
     private byte[] randomBytes() { byte[] value = new byte[32]; new java.security.SecureRandom().nextBytes(value); return value; }
     private String hash(String value) {

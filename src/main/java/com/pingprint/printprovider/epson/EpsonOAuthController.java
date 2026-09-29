@@ -20,6 +20,9 @@ public class EpsonOAuthController {
     @PostMapping("/api/admin/printers/{printerId}/epson/capabilities/refresh")
     public Map<String, Boolean> refresh(@PathVariable UUID printerId) { auth.refreshCapabilities(printerId); return Map.of("refreshed", true); }
 
+    @PostMapping("/api/admin/printers/{printerId}/epson/test")
+    public Map<String, Object> test(@PathVariable UUID printerId) { return auth.testConnection(printerId); }
+
     @GetMapping("/api/epson/oauth/callback")
     public RedirectView callback(@RequestParam String code, @RequestParam String state) {
         try {
