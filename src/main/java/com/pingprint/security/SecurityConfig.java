@@ -21,7 +21,9 @@ public class SecurityConfig {
     @Bean SecurityFilterChain securityFilterChain(HttpSecurity http, JwtAuthenticationFilter jwtFilter) throws Exception {
         http.csrf(csrf -> csrf.disable()).cors(cors -> { }).sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/api/auth/**", "/api/admin/login", "/api/health", "/api/payments/paypal/webhook", "/api/payments/razorpay/webhook", "/api/epson/oauth/callback", "/actuator/health").permitAll()
+                .requestMatchers("/api/auth/**", "/api/admin/login", "/api/health", "/api/dev/printer-bypass", "/api/payments/paypal/webhook", "/api/payments/razorpay/webhook", "/api/epson/oauth/callback", "/actuator/health").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/documents", "/api/print-orders", "/api/payments/razorpay/create-order-for-print", "/api/payments/razorpay/verify").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/print-orders/*/status").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/printers", "/api/printers/*", "/api/printers/*/capabilities", "/api/pricing").permitAll()
                 .requestMatchers("/api/admin/**").hasRole("ADMIN")
                 .anyRequest().authenticated())

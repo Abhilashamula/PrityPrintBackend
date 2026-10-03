@@ -68,4 +68,45 @@ class RazorpayPaymentServiceTest {
         verify(transaction, never()).capture(anyString());
         verifyNoInteractions(printJobs);
     }
+
+    @Test void guestCanVerifyGuestOrder() {
+        UUID orderId = UUID.randomUUID();
+        PrintOrder order = mock(PrintOrder.class);
+        PaymentTransaction transaction = mock(PaymentTransaction.class);
+        when(gateway.verifyPayment("order_guest", "pay_guest", "signature")).thenReturn(true);
+        when(order.getId()).thenReturn(orderId);
+        when(order.getUserId()).thenReturn(null);
+        when(transaction.getProviderOrderId()).thenReturn("order_guest");
+        when(transaction.getOrderId()).thenReturn(orderId);
+        when(transaction.getStatus()).thenReturn("CREATED");
+        when(orders.findByRazorpayOrderId("order_guest")).thenReturn(Optional.of(order));
+        when(transactions.findByProviderAndProviderPaymentId("RAZORPAY", "pay_guest")).thenReturn(Optional.empty());
+        when(transactions.findByProviderAndProviderOrderId("RAZORPAY", "order_guest")).thenReturn(Optional.of(transaction));
+
+        Map<String, Object> response = service.verify("order_guest", "pay_guest", "signature", null);
+
+        assertThat(response.get("verified")).isEqualTo(true);
+    }
+
+    @Test void duplicateRefundWebhookIsProcessedOnce() {
+        UUID orderId = UUID.randomUUID();
+        PrintOrder order = mock(PrintOrder.class);
+        PaymentTransaction transaction = mock(PaymentTransaction.class);
+        when(transaction.getOrderId()).thenReturn(orderId);
+        when(transaction.getAmountMinor()).thenReturn(500L);
+        when(transactions.findByRefundId("rfnd_1")).thenReturn(Optional.empty());
+        when(transactions.findByProviderAndProviderPaymentId("RAZORPAY", "pay_1")).thenReturn(Optional.of(transaction));
+        when(orders.findById(orderId)).thenReturn(Optional.of(order));
+        when(db.update(anyString(), any(), any(), any())).thenReturn(1, 0);
+        String payload = """
+            {"id":"evt_refund_1","event":"refund.processed","payload":{"refund":{"entity":{
+              "id":"rfnd_1","payment_id":"pay_1","amount":500,"currency":"INR","status":"processed"
+            }}}}
+            """;
+
+        service.webhook(payload);
+        service.webhook(payload);
+
+        verify(transaction, times(1)).refundProcessed("rfnd_1", 500L);
+    }
 }

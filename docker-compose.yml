@@ -38,10 +38,17 @@ services:
       EPSON_CLIENT_SECRET: ${EPSON_CLIENT_SECRET:-}
       EPSON_REDIRECT_URI: ${EPSON_REDIRECT_URI:-http://localhost:8080/api/epson/oauth/callback}
       TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY:-}
+      DOCUMENTS_PATH: /app/data/documents
+      LIBREOFFICE_COMMAND: libreoffice
+      DOCUMENT_CONVERSION_TIMEOUT_SECONDS: 90
       REQUIRE_EMAIL_VERIFICATION: "false"
+      DEVELOPMENT_PRINTER_BYPASS_ENABLED: "true"
       PORT: 8080
     ports:
       - "8080:8080"
+    volumes:
+      - pingprint-documents:/app/data/documents
 
 volumes:
   pingprint-postgres:
+  pingprint-documents:

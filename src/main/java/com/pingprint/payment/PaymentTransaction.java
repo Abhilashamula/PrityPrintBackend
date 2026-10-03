@@ -23,6 +23,8 @@ public class PaymentTransaction {
     @Column(name = "refund_amount_minor") private Long refundAmountMinor;
     @Column(name = "refund_reason") private String refundReason;
     @Column(name = "refunded_at") private Instant refundedAt;
+    @Column(name = "refund_status", length = 24) private String refundStatus;
+    @Column(name = "refund_failure_reason", length = 500) private String refundFailureReason;
 
     protected PaymentTransaction() { }
     public PaymentTransaction(PrintOrder order, String provider, String providerOrderId, long amountMinor) {
@@ -34,9 +36,12 @@ public class PaymentTransaction {
     public UUID getOrderId() { return order.getId(); }
     public long getAmountMinor() { return amountMinor; }
     public String getRefundId() { return refundId; }
+    public String getRefundStatus() { return refundStatus; }
     public void linkPayment(String paymentId) { providerPaymentId = paymentId; updatedAt = Instant.now(); }
     public void capture(String paymentId) { providerPaymentId = paymentId; status = "CAPTURED"; updatedAt = Instant.now(); }
-    public void fail(String reason) { status = "FAILED"; failureReason = reason; updatedAt = Instant.now(); }
-    public void refund(String id, long amount, String reason) { refundId = id; refundAmountMinor = amount; refundReason = reason; status = "REFUNDED"; refundedAt = Instant.now(); updatedAt = refundedAt; order.markRefunded(); }
+    public void fail(String reason) { if (!status.equals("CAPTURED") && !status.equals("REFUNDED")) { status = "FAILED"; failureReason = reason; updatedAt = Instant.now(); } }
+    public void refundRequested(String id, long amount, String reason) { if (!"PROCESSED".equals(refundStatus)) { refundId = id; refundAmountMinor = amount; refundReason = reason; refundStatus = "PENDING"; refundFailureReason = null; updatedAt = Instant.now(); } }
+    public void refundProcessed(String id, long amount) { refundId = id; refundAmountMinor = amount; refundStatus = "PROCESSED"; refundFailureReason = null; status = "REFUNDED"; refundedAt = Instant.now(); updatedAt = refundedAt; order.markRefunded(); }
+    public void refundFailed(String id, String reason) { if (!"PROCESSED".equals(refundStatus)) { if (id != null && !id.isBlank()) refundId = id; refundStatus = "FAILED"; refundFailureReason = reason == null ? "Refund failed" : reason.substring(0, Math.min(reason.length(), 500)); updatedAt = Instant.now(); } }
     public void setProviderEventId(String value) { providerEventId = value; updatedAt = Instant.now(); }
 }

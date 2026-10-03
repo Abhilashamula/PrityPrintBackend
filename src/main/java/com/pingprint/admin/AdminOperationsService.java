@@ -34,18 +34,24 @@ public class AdminOperationsService {
               (SELECT COALESCE(SUM(amount_minor),0) FROM payment_transactions WHERE status = 'CAPTURED') revenue_minor,
               (SELECT COUNT(*) FROM print_jobs WHERE status IN ('QUEUED','SUBMITTING')) queued_jobs,
               (SELECT COUNT(*) FROM print_jobs WHERE status IN ('FAILED','STATUS_UNKNOWN')) failed_jobs,
-              (SELECT COUNT(*) FROM printers WHERE active AND NOT archived AND status IN ('ONLINE','BUSY')) active_printers
+              (SELECT COUNT(*) FROM printers p
+                WHERE p.active AND NOT p.archived AND p.status IN ('ONLINE','BUSY')
+                  AND p.provider = 'EPSON_CONNECT'
+                  AND EXISTS (SELECT 1 FROM printer_provider_connections c WHERE c.printer_id=p.id AND c.connected AND NOT c.reauthorization_required)
+                  AND EXISTS (SELECT 1 FROM printer_media_config m WHERE m.printer_id=p.id AND m.enabled)) active_printers
             """;
         return db.queryForMap(sql, Map.of());
     }
 
     public Map<String, Object> transactions(int page, int size, String search, String paymentStatus,
-                                             String printStatus, UUID printerId, LocalDate from, LocalDate to, String direction) {
+                                             String printStatus, UUID printerId, LocalDate from, LocalDate to,
+                                             boolean includeArchived, String direction) {
         int safePage = Math.max(0, page); int safeSize = Math.min(100, Math.max(1, size));
         StringBuilder where = new StringBuilder(" WHERE 1=1 ");
         MapSqlParameterSource params = new MapSqlParameterSource();
+        if (!includeArchived) where.append(" AND NOT t.archived ");
         if (search != null && !search.isBlank()) {
-            where.append(" AND (CAST(t.id AS text) ILIKE :search OR CAST(o.id AS text) ILIKE :search OR COALESCE(u.name,'') ILIKE :search OR COALESCE(u.email,'') ILIKE :search OR COALESCE(t.provider_payment_id,'') ILIKE :search) ");
+            where.append(" AND (CAST(t.id AS text) ILIKE :search OR CAST(o.id AS text) ILIKE :search OR COALESCE(u.display_name,'') ILIKE :search OR COALESCE(u.email,'') ILIKE :search OR COALESCE(t.provider_payment_id,'') ILIKE :search) ");
             params.addValue("search", "%" + search.trim() + "%");
         }
         if (paymentStatus != null && !paymentStatus.isBlank()) { where.append(" AND t.status = :paymentStatus "); params.addValue("paymentStatus", paymentStatus.toUpperCase()); }
@@ -59,11 +65,13 @@ public class AdminOperationsService {
         String order = "asc".equalsIgnoreCase(direction) ? "ASC" : "DESC";
         String select = """
             SELECT t.id transaction_id, o.id order_id, t.provider_order_id razorpay_order_id,
-              t.provider_payment_id razorpay_payment_id, COALESCE(u.name,'Guest/System') student_name,
+              t.provider_payment_id razorpay_payment_id, COALESCE(u.display_name,'Guest/System') student_name,
               u.email student_email, p.id printer_id, p.name printer_name, p.location printer_location,
               t.amount_minor, o.currency, t.status payment_status, o.status order_status,
               COALESCE(j.status,'NOT_CREATED') print_status, t.created_at, o.paid_at,
-              COALESCE(t.failure_reason,j.failure_reason) failure_reason, j.id print_job_id
+              COALESCE(t.failure_reason,j.failure_reason) failure_reason, j.id print_job_id,
+              t.refund_id, t.refund_amount_minor, t.refund_status, t.refund_reason,
+              t.refund_failure_reason, t.refunded_at, t.archived, t.archived_at
             """;
         List<Map<String, Object>> items = db.queryForList(select + joins + where + " ORDER BY t.created_at " + order + " LIMIT :limit OFFSET :offset", params);
         return Map.of("items", items, "page", safePage, "size", safeSize, "total", total, "totalPages", (total + safeSize - 1) / safeSize);
@@ -73,12 +81,14 @@ public class AdminOperationsService {
         MapSqlParameterSource params = new MapSqlParameterSource("id", id);
         String sql = """
             SELECT t.id transaction_id, o.id order_id, t.provider_order_id razorpay_order_id,
-              t.provider_payment_id razorpay_payment_id, COALESCE(u.name,'Guest/System') student_name,
+              t.provider_payment_id razorpay_payment_id, COALESCE(u.display_name,'Guest/System') student_name,
               u.email student_email, p.id printer_id, p.name printer_name, p.location printer_location,
               t.amount_minor, o.currency, t.status payment_status, o.status order_status,
               COALESCE(j.status,'NOT_CREATED') print_status, t.created_at, o.paid_at,
               COALESCE(t.failure_reason,j.failure_reason) failure_reason, j.id print_job_id,
-              o.file_name, o.total_pages, o.copies, o.paper_size, o.paper_type, o.color_mode
+              o.file_name, o.total_pages, o.copies, o.paper_size, o.paper_type, o.color_mode,
+              t.refund_id, t.refund_amount_minor, t.refund_status, t.refund_reason,
+              t.refund_failure_reason, t.refunded_at, t.archived, t.archived_at
             FROM payment_transactions t JOIN print_orders o ON o.id=t.order_id
             JOIN printers p ON p.id=o.printer_id LEFT JOIN app_users u ON u.id=o.user_id
             LEFT JOIN print_jobs j ON j.order_id=o.id WHERE t.id=:id
@@ -102,10 +112,50 @@ public class AdminOperationsService {
     }
 
     @Transactional
+    public void setTransactionArchived(UUID transactionId, boolean archived) {
+        int changed = db.update("UPDATE payment_transactions SET archived=:archived, archived_at=CASE WHEN :archived THEN NOW() ELSE NULL END, updated_at=NOW() WHERE id=:id",
+            new MapSqlParameterSource("id", transactionId).addValue("archived", archived));
+        if (changed == 0) throw new IllegalArgumentException("Transaction not found");
+    }
+
+    public String exportTransactions() {
+        List<Map<String, Object>> rows = db.queryForList("""
+            SELECT t.id transaction_id, o.id order_id, t.provider, t.provider_order_id,
+              t.provider_payment_id, u.display_name student_name, u.email student_email,
+              p.name printer_name, p.location printer_location, t.amount_minor, o.currency,
+              t.status payment_status, o.status order_status, COALESCE(j.status,'NOT_CREATED') print_status,
+              t.refund_id, t.refund_amount_minor, t.refund_status, t.created_at, t.refunded_at,
+              t.archived, t.archived_at
+            FROM payment_transactions t JOIN print_orders o ON o.id=t.order_id
+            JOIN printers p ON p.id=o.printer_id LEFT JOIN app_users u ON u.id=o.user_id
+            LEFT JOIN print_jobs j ON j.order_id=o.id ORDER BY t.created_at DESC
+            """, Map.of());
+        String[] columns = {"transaction_id","order_id","provider","provider_order_id","provider_payment_id",
+            "student_name","student_email","printer_name","printer_location","amount_minor","currency",
+            "payment_status","order_status","print_status","refund_id","refund_amount_minor","refund_status",
+            "created_at","refunded_at","archived","archived_at"};
+        StringBuilder csv = new StringBuilder(String.join(",", columns)).append('\n');
+        for (Map<String, Object> row : rows) {
+            for (int i = 0; i < columns.length; i++) {
+                if (i > 0) csv.append(',');
+                csv.append(csvCell(row.get(columns[i])));
+            }
+            csv.append('\n');
+        }
+        return csv.toString();
+    }
+
+    private String csvCell(Object value) {
+        if (value == null) return "";
+        String text = String.valueOf(value);
+        return "\"" + text.replace("\"", "\"\"").replace("\r", " ").replace("\n", " ") + "\"";
+    }
+
+    @Transactional
     public PrintJob submitTest(UUID printerId) {
         Printer printer = printers.findById(printerId).orElseThrow(() -> new IllegalArgumentException("Printer not found"));
         if (printer.isArchived() || !printer.isActive()) throw new IllegalStateException("Enable the printer before sending a test print");
-        PrinterMediaConfig selected = media.findByPrinterIdAndEnabledTrueOrderByPaperSizeAscPaperTypeAsc(printerId).stream().findFirst()
+        PrinterMediaConfig selected = media.findByPrinter_IdAndEnabledTrueOrderByPaperSizeAscPaperTypeAsc(printerId).stream().findFirst()
             .orElseThrow(() -> new IllegalStateException("Configure and enable loaded media before sending a test print"));
         Document document = documents.storeSystemTestPdf(printer.getName());
         PrintOrder order = orders.save(PrintOrder.test(printer, document, selected));

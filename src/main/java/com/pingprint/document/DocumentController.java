@@ -16,11 +16,8 @@ public class DocumentController {
     @PostMapping(consumes = "multipart/form-data")
     @ResponseStatus(HttpStatus.CREATED)
     public Map<String, Object> upload(@RequestPart("file") MultipartFile file, Authentication authentication) {
-        Document document = service.store(userId(authentication), file);
+        UUID userId = authentication != null && authentication.getPrincipal() instanceof UUID id ? id : null;
+        Document document = service.store(userId, file);
         return Map.of("id", document.getId(), "fileName", document.getOriginalFileName(), "pageCount", document.getPageCount(), "contentType", document.getContentType());
-    }
-    private UUID userId(Authentication authentication) {
-        if (authentication != null && authentication.getPrincipal() instanceof UUID id) return id;
-        throw new org.springframework.security.access.AccessDeniedException("Sign in is required");
     }
 }

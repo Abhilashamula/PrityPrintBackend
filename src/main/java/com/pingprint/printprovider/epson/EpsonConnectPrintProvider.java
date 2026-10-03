@@ -36,7 +36,8 @@ public class EpsonConnectPrintProvider implements PrintProvider {
         EpsonConnectClient.CreatedJob created = client.createJob(token, request);
         job.recordProviderJob(created.jobId()); jobs.saveAndFlush(job);
         Document document = order.getDocument();
-        String extension = extension(document.getOriginalFileName());
+        String extension = document.getContentType().equals("application/pdf") ? "pdf"
+            : document.getContentType().equals("image/jpeg") ? "jpg" : "png";
         client.upload(created.uploadUri(), extension, document.getContentType(), documents.read(document));
         client.execute(token, created.jobId());
         job.submitted(); jobs.save(job);

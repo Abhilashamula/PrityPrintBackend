@@ -35,7 +35,12 @@ public class PrintJobWorker {
         for (PrintJob job : jobs.findTop20ByStatusInOrderByUpdatedAtAsc(java.util.List.of("SUBMITTED", "PRINTING"))) {
             PrintProvider provider = providers.get(job.getProvider());
             if (provider == null) continue;
-            try { provider.refreshStatus(job); }
+            try {
+                provider.refreshStatus(job);
+                if ("FAILED".equals(job.getStatus())) {
+                    refunds.initiateForDefinitePrintFailure(job.getOrder().getId(), job.getFailureReason());
+                }
+            }
             catch (ProviderException error) { if (error.isAmbiguous()) { job.providerStatus("unavailable", error.getMessage()); jobs.save(job); } }
             catch (RuntimeException ignored) { }
         }
@@ -45,7 +50,12 @@ public class PrintJobWorker {
     private void submit(UUID id) {
         PrintJob job = jobs.findDetailedById(id).orElse(null); if (job == null) return;
         PrintProvider provider = providers.get(job.getProvider());
-        if (provider == null) { job.failed("No print provider is registered for " + job.getProvider()); jobs.save(job); return; }
+        if (provider == null) {
+            job.failed("No print provider is registered for " + job.getProvider());
+            jobs.save(job);
+            refunds.initiateForDefinitePrintFailure(job.getOrder().getId(), job.getFailureReason());
+            return;
+        }
         try { provider.submit(job); }
         catch (IllegalStateException error) {
             if (job.getAttemptCount() >= maxAttempts) {

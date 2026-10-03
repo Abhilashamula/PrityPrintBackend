@@ -8,7 +8,7 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 
 public interface PrinterProviderConnectionRepository extends JpaRepository<PrinterProviderConnection, UUID> {
-    Optional<PrinterProviderConnection> findByPrinterId(UUID printerId);
+    Optional<PrinterProviderConnection> findByPrinter_Id(UUID printerId);
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select c from PrinterProviderConnection c where c.printer.id = :printerId")
     Optional<PrinterProviderConnection> findByPrinterIdForUpdate(UUID printerId);

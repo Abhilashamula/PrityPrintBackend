@@ -44,7 +44,7 @@ public class EpsonAuthService {
         if (stored.isExpired()) throw new IllegalArgumentException("Epson OAuth state expired");
         Printer printer = printers.findById(stored.getPrinterId()).orElseThrow(() -> new IllegalArgumentException("Printer not found"));
         EpsonConnectClient.TokenResponse tokens = client.exchangeCode(code);
-        PrinterProviderConnection connection = connections.findByPrinterId(printer.getId()).orElseGet(() -> new PrinterProviderConnection(printer, "EPSON_CONNECT"));
+        PrinterProviderConnection connection = connections.findByPrinter_Id(printer.getId()).orElseGet(() -> new PrinterProviderConnection(printer, "EPSON_CONNECT"));
         Instant now = Instant.now();
         connection.authorize(cipher.encrypt(tokens.access_token()), cipher.encrypt(tokens.refresh_token()), now.plusSeconds(tokens.expires_in()), now.plus(30, ChronoUnit.DAYS));
         JsonNode device = client.deviceInfo(tokens.access_token());
@@ -77,7 +77,7 @@ public class EpsonAuthService {
     }
     @Transactional
     public void refreshCapabilities(UUID printerId) {
-        PrinterProviderConnection connection = connections.findByPrinterId(printerId).orElseThrow(() -> new IllegalArgumentException("Epson connection not found"));
+        PrinterProviderConnection connection = connections.findByPrinter_Id(printerId).orElseThrow(() -> new IllegalArgumentException("Epson connection not found"));
         connection.updateCapabilities(client.capabilities(validAccessToken(printerId), "document").toString());
         connections.save(connection);
         operations.audit("CAPABILITIES_REFRESHED", "PRINTER", printerId, "Refreshed Epson document capabilities");

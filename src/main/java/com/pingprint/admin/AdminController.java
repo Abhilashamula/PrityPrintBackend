@@ -4,6 +4,7 @@ import com.pingprint.printer.Printer;
 import com.pingprint.printer.PrinterRepository;
 import com.pingprint.printer.PrinterStatus;
 import com.pingprint.printer.PrinterProviderConnectionRepository;
+import com.pingprint.printer.PrinterAvailabilityService;
 import com.pingprint.security.JwtService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -28,13 +29,15 @@ public class AdminController {
     private final String adminUsername;
     private final String adminPassword;
     private final AdminOperationsService operations;
+    private final PrinterAvailabilityService availability;
 
     public AdminController(JwtService jwt, PrinterRepository printers, JdbcTemplate db, PrinterProviderConnectionRepository connections,
                            @Value("${app.admin.username}") String adminUsername, @Value("${app.admin.password}") String adminPassword,
-                           AdminOperationsService operations) {
+                           AdminOperationsService operations, PrinterAvailabilityService availability) {
         this.jwt = jwt; this.printers = printers; this.db = db; this.connections = connections;
         this.adminUsername = adminUsername; this.adminPassword = adminPassword;
         this.operations = operations;
+        this.availability = availability;
     }
 
     public record LoginRequest(@NotBlank String username, @NotBlank String password) { }
@@ -116,13 +119,17 @@ public class AdminController {
         catch (Exception error) { throw new IllegalStateException(error); }
     }
     private Map<String, Object> printerView(Printer printer) {
-        var connection = connections.findByPrinterId(printer.getId()).orElse(null);
+        var connection = connections.findByPrinter_Id(printer.getId()).orElse(null);
         Map<String, Object> value = new java.util.LinkedHashMap<>();
         value.put("id", printer.getId()); value.put("name", printer.getName()); value.put("location", printer.getLocation());
         value.put("status", printer.getStatus()); value.put("active", printer.isActive()); value.put("provider", printer.getProvider());
         value.put("archived", printer.isArchived());
         value.put("manufacturer", printer.getManufacturer()); value.put("model", printer.getModel());
+        value.put("providerDeviceId", connection == null ? null : connection.getProviderDeviceId());
         value.put("connectionState", connection == null ? "NOT_CONNECTED" : connection.isReauthorizationRequired() ? "REAUTHORIZATION_REQUIRED" : connection.isConnected() ? "CONNECTED" : "OFFLINE");
+        var issues = availability.studentAvailabilityIssues(printer);
+        value.put("studentAvailable", issues.isEmpty());
+        value.put("availabilityIssues", issues);
         return value;
     }
 }

@@ -24,7 +24,7 @@ public class PrinterCapabilityService {
     public Capabilities studentCapabilities(UUID printerId) {
         Printer printer = printers.findById(printerId).orElseThrow(() -> new IllegalArgumentException("Printer not found"));
         boolean available = printer.isActive() && (printer.getStatus() == PrinterStatus.ONLINE || printer.getStatus() == PrinterStatus.BUSY);
-        List<MediaOption> options = media.findByPrinterIdAndEnabledTrueOrderByPaperSizeAscPaperTypeAsc(printerId).stream().map(item -> {
+        List<MediaOption> options = media.findByPrinter_IdAndEnabledTrueOrderByPaperSizeAscPaperTypeAsc(printerId).stream().map(item -> {
             List<String> colors = new ArrayList<>(); if (item.isMonoSupported()) colors.add("MONO"); if (item.isColorSupported()) colors.add("COLOR");
             return new MediaOption(item.getId(), displayValue(item.getPaperSize(), "ps_"), displayValue(item.getPaperType(), "pt_"), colors,
                 item.isDuplexSupported(), item.getPriceBwMinor(), item.getPriceColorMinor());
@@ -33,10 +33,10 @@ public class PrinterCapabilityService {
         return new Capabilities(printerId, available && !options.isEmpty(), !epsonConnect, !epsonConnect, options);
     }
     public List<ConfigureMedia> adminMedia(UUID printerId) {
-        return media.findByPrinterIdOrderByPaperSizeAscPaperTypeAsc(printerId).stream().map(this::dto).toList();
+        return media.findByPrinter_IdOrderByPaperSizeAscPaperTypeAsc(printerId).stream().map(this::dto).toList();
     }
     public List<SupportedMedia> supportedMedia(UUID printerId) {
-        String raw = connections.findByPrinterId(printerId).map(PrinterProviderConnection::getCapabilitiesJson)
+        String raw = connections.findByPrinter_Id(printerId).map(PrinterProviderConnection::getCapabilitiesJson)
             .orElseThrow(() -> new IllegalStateException("Connect Epson and refresh capabilities first"));
         try {
             JsonNode root = json.readTree(raw); List<SupportedMedia> result = new ArrayList<>();
@@ -58,14 +58,14 @@ public class PrinterCapabilityService {
             : media.findById(request.id()).filter(value -> value.getPrinterId().equals(printerId)).orElseThrow(() -> new IllegalArgumentException("Media configuration not found"));
         item.configure(request.enabled(), request.duplexSupported(), request.colorSupported(), request.monoSupported(), request.borderless(), request.priceBwMinor(), request.priceColorMinor(), request.printQuality());
         if (request.enabled()) {
-            for (PrinterMediaConfig other : media.findByPrinterIdAndPaperSourceAndEnabledTrue(printerId, item.getPaperSource())) {
+            for (PrinterMediaConfig other : media.findByPrinter_IdAndPaperSourceAndEnabledTrue(printerId, item.getPaperSource())) {
                 if (!other.getId().equals(item.getId())) { other.disable(); media.save(other); }
             }
         }
         return dto(media.save(item));
     }
     private void validateEpsonCapability(UUID printerId, ConfigureMedia request) {
-        String raw = connections.findByPrinterId(printerId).map(PrinterProviderConnection::getCapabilitiesJson).orElseThrow(() -> new IllegalStateException("Connect Epson and refresh capabilities first"));
+        String raw = connections.findByPrinter_Id(printerId).map(PrinterProviderConnection::getCapabilitiesJson).orElseThrow(() -> new IllegalStateException("Connect Epson and refresh capabilities first"));
         try {
             JsonNode root = json.readTree(raw);
             boolean colorAllowed = contains(root.path("colorModes"), "color"); boolean monoAllowed = contains(root.path("colorModes"), "mono");

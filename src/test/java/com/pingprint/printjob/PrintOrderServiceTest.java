@@ -36,7 +36,7 @@ class PrintOrderServiceTest {
         PrinterMediaConfig config = new PrinterMediaConfig(printer, "rear", "ps_a4", "pt_plainpaper", "normal");
         mediaId = UUID.randomUUID(); ReflectionTestUtils.setField(config, "id", mediaId); config.configure(true, false, true, true, false, 200, 500, "normal");
         when(users.findById(userId)).thenReturn(Optional.of(user)); when(printers.findById(printerId)).thenReturn(Optional.of(printer));
-        when(documents.findById(documentId)).thenReturn(Optional.of(document)); when(media.findByIdAndPrinterIdAndEnabledTrue(mediaId, printerId)).thenReturn(Optional.of(config));
+        when(documents.findById(documentId)).thenReturn(Optional.of(document)); when(media.findByIdAndPrinter_IdAndEnabledTrue(mediaId, printerId)).thenReturn(Optional.of(config));
         when(orders.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
     }
 
@@ -47,12 +47,24 @@ class PrintOrderServiceTest {
         assertThat(order.getPaperSource()).isEqualTo("rear");
     }
 
+    @Test void createsGuestOrderForGuestDocument() {
+        Document guestDocument = new Document(null, "guest/key.pdf", "notes.pdf", "application/pdf", 100, 5);
+        ReflectionTestUtils.setField(guestDocument, "id", documentId);
+        when(documents.findById(documentId)).thenReturn(Optional.of(guestDocument));
+
+        PrintOrder order = service.create(null, request("BW", false, null));
+
+        assertThat(order.getUserId()).isNull();
+        assertThat(order.getOrderType()).isEqualTo("GUEST");
+        assertThat(order.getAmountMinor()).isEqualTo(2_000);
+    }
+
     @Test void rejectsUnsupportedDuplex() {
         assertThatThrownBy(() -> service.create(userId, request("BW", true, null))).hasMessageContaining("Duplex");
     }
 
     @Test void rejectsUnavailableMedia() {
-        when(media.findByIdAndPrinterIdAndEnabledTrue(mediaId, printerId)).thenReturn(Optional.empty());
+        when(media.findByIdAndPrinter_IdAndEnabledTrue(mediaId, printerId)).thenReturn(Optional.empty());
         assertThatThrownBy(() -> service.create(userId, request("BW", false, null))).hasMessageContaining("media is unavailable");
     }
 

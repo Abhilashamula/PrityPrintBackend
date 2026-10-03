@@ -6,8 +6,8 @@ import java.util.Optional;
 import java.util.UUID;
 
 public interface PrinterMediaConfigRepository extends JpaRepository<PrinterMediaConfig, UUID> {
-    List<PrinterMediaConfig> findByPrinterIdOrderByPaperSizeAscPaperTypeAsc(UUID printerId);
-    List<PrinterMediaConfig> findByPrinterIdAndEnabledTrueOrderByPaperSizeAscPaperTypeAsc(UUID printerId);
-    Optional<PrinterMediaConfig> findByIdAndPrinterIdAndEnabledTrue(UUID id, UUID printerId);
-    List<PrinterMediaConfig> findByPrinterIdAndPaperSourceAndEnabledTrue(UUID printerId, String paperSource);
+    List<PrinterMediaConfig> findByPrinter_IdOrderByPaperSizeAscPaperTypeAsc(UUID printerId);
+    List<PrinterMediaConfig> findByPrinter_IdAndEnabledTrueOrderByPaperSizeAscPaperTypeAsc(UUID printerId);
+    Optional<PrinterMediaConfig> findByIdAndPrinter_IdAndEnabledTrue(UUID id, UUID printerId);
+    List<PrinterMediaConfig> findByPrinter_IdAndPaperSourceAndEnabledTrue(UUID printerId, String paperSource);
 }

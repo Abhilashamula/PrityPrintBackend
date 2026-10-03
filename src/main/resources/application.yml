@@ -1,6 +1,8 @@
 spring:
   application:
     name: ping-print-backend
+  autoconfigure:
+    exclude: org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
   datasource:
     url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/pingprint}
     username: ${DATABASE_USERNAME:pingprint}
@@ -27,6 +29,7 @@ server:
     max-swallow-size: 20MB
 
 app:
+  development-printer-bypass-enabled: ${DEVELOPMENT_PRINTER_BYPASS_ENABLED:false}
   frontend-url: ${FRONTEND_URL:http://localhost:5173,http://localhost:5174}
   google-client-id: ${GOOGLE_CLIENT_ID:}
   admin:
@@ -41,6 +44,9 @@ app:
     documents-path: ${DOCUMENTS_PATH:./data/documents}
     retention-hours: ${DOCUMENT_RETENTION_HOURS:24}
     cleanup-delay-ms: ${DOCUMENT_CLEANUP_DELAY_MS:3600000}
+  conversion:
+    libreoffice-command: ${LIBREOFFICE_COMMAND:libreoffice}
+    timeout-seconds: ${DOCUMENT_CONVERSION_TIMEOUT_SECONDS:90}
   epson:
     api-key: ${EPSON_API_KEY:}
     client-id: ${EPSON_CLIENT_ID:}

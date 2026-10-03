@@ -80,9 +80,9 @@ public class PrintOrderService {
     private int countPages(String normalizedRange) { return normalizedRange.split(",").length; }
 
     private PrinterMediaConfig selectMedia(UUID printerId, CreateRequest request) {
-        if (request.mediaConfigId() != null) return media.findByIdAndPrinterIdAndEnabledTrue(request.mediaConfigId(), printerId).orElseThrow(() -> new IllegalArgumentException("Selected media is unavailable"));
+        if (request.mediaConfigId() != null) return media.findByIdAndPrinter_IdAndEnabledTrue(request.mediaConfigId(), printerId).orElseThrow(() -> new IllegalArgumentException("Selected media is unavailable"));
         String size = value(request.paperSize(), "").toUpperCase(); String type = value(request.paperType(), "").toUpperCase();
-        return media.findByPrinterIdAndEnabledTrueOrderByPaperSizeAscPaperTypeAsc(printerId).stream()
+        return media.findByPrinter_IdAndEnabledTrueOrderByPaperSizeAscPaperTypeAsc(printerId).stream()
             .filter(item -> item.getPaperSize().equalsIgnoreCase(size) || item.getPaperSize().equalsIgnoreCase("ps_" + size.toLowerCase()))
             .filter(item -> item.getPaperType().equalsIgnoreCase(type) || item.getPaperType().equalsIgnoreCase("pt_" + type.toLowerCase()) || (type.equals("PLAIN") && item.getPaperType().equalsIgnoreCase("pt_plainpaper")))
             .findFirst().orElseThrow(() -> new IllegalArgumentException("Selected paper is not loaded or supported"));

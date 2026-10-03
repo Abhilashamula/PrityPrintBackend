@@ -76,7 +76,7 @@ public class EpsonConnectClient {
         try {
             client.post().uri(uri).contentType(MediaType.parseMediaType(contentType)).body(bytes).retrieve().toBodilessEntity();
         } catch (HttpStatusCodeException error) { throw new ProviderException("Epson rejected the document upload", false, error); }
-        catch (ResourceAccessException error) { throw new ProviderException("Epson document upload timed out", false, error); }
+        catch (ResourceAccessException error) { throw new ProviderException("Epson document upload timed out; verify the provider job before retrying", true, error); }
     }
     public void execute(String token, String jobId) { postEmpty("/printing/jobs/" + jobId + "/print", token, true); }
     public JsonNode jobInfo(String token, String jobId) { return get("/printing/jobs/" + jobId, token); }

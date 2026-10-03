@@ -22,7 +22,6 @@ public class PrintOrderController {
     @ResponseStatus(HttpStatus.CREATED)
     public Map<String, Object> create(@Valid @RequestBody Request request, Authentication authentication) {
         UUID userId = authentication != null && authentication.getPrincipal() instanceof UUID id ? id : null;
-        if (userId == null) throw new org.springframework.security.access.AccessDeniedException("Sign in is required");
         PrintOrder order = service.create(userId, new PrintOrderService.CreateRequest(request.printerId(), request.documentId(), request.mediaConfigId(), request.copies(), request.paperSize(), request.paperType(), request.colorMode(), request.duplex(), request.orientation(), request.pageRange()));
         return Map.of("id", order.getId(), "amountMinor", order.getAmountMinor(), "currency", order.getCurrency(), "status", order.getStatus(), "totalPages", order.getTotalPages(), "copies", order.getCopies(), "printerId", order.getPrinterId(), "fileName", order.getFileName());
     }
@@ -31,7 +30,7 @@ public class PrintOrderController {
     public Map<String, Object> status(@PathVariable UUID id, Authentication authentication) {
         PrintOrder order = orders.findById(id).orElseThrow(() -> new IllegalArgumentException("Print order not found"));
         UUID userId = authentication != null && authentication.getPrincipal() instanceof UUID value ? value : null;
-        if (userId == null || !userId.equals(order.getUserId())) throw new org.springframework.security.access.AccessDeniedException("Order does not belong to this user");
+        if (order.getUserId() != null && !order.getUserId().equals(userId)) throw new org.springframework.security.access.AccessDeniedException("Order does not belong to this user");
         PrintJob job = jobs.findByOrderId(id).orElse(null);
         return Map.of(
             "orderId", order.getId(),

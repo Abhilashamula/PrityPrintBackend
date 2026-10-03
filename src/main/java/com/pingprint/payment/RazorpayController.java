@@ -39,6 +39,6 @@ public class RazorpayController {
     }
     private UUID userId(Authentication authentication) {
         if (authentication != null && authentication.getPrincipal() instanceof UUID id) return id;
-        throw new AccessDeniedException("Sign in is required");
+        return null;
     }
 }

@@ -27,7 +27,8 @@ public class RazorpayPaymentService {
 
     @Transactional
     public Map<String, Object> createOrder(UUID internalOrderId, UUID userId) {
-        PrintOrder order = orders.findByIdAndUserId(internalOrderId, userId).orElseThrow(() -> new IllegalArgumentException("Print order not found"));
+        PrintOrder order = orders.findById(internalOrderId).orElseThrow(() -> new IllegalArgumentException("Print order not found"));
+        requireOwner(order, userId);
         if (order.getRazorpayOrderId() != null) return Map.of("id", order.getRazorpayOrderId(), "amount", order.getAmountMinor(), "currency", order.getCurrency());
         Map<String, Object> response = gateway.createOrder(order.getAmountMinor(), "print_" + order.getId());
         String providerOrderId = String.valueOf(response.get("id"));
@@ -40,7 +41,7 @@ public class RazorpayPaymentService {
     public Map<String, Object> verify(String providerOrderId, String paymentId, String signature, UUID userId) {
         if (!gateway.verifyPayment(providerOrderId, paymentId, signature)) throw new IllegalArgumentException("Invalid Razorpay payment signature");
         PrintOrder order = orders.findByRazorpayOrderId(providerOrderId).orElseThrow(() -> new IllegalArgumentException("Print order not found for Razorpay order"));
-        if (!userId.equals(order.getUserId())) throw new org.springframework.security.access.AccessDeniedException("Order does not belong to this user");
+        requireOwner(order, userId);
         PaymentTransaction transaction = transactions.findByProviderAndProviderPaymentId(PROVIDER, paymentId).orElseGet(() -> transactions.findByProviderAndProviderOrderId(PROVIDER, providerOrderId).orElseThrow(() -> new IllegalArgumentException("Payment transaction not found")));
         if (!providerOrderId.equals(transaction.getProviderOrderId()) || !order.getId().equals(transaction.getOrderId())) throw new IllegalArgumentException("Payment does not belong to this order");
         if (!transaction.getStatus().equals("CAPTURED")) { transaction.linkPayment(paymentId); transactions.save(transaction); }
@@ -55,11 +56,17 @@ public class RazorpayPaymentService {
         try {
             JsonNode root = json.readTree(payload);
             String event = root.path("event").asText();
-            String paymentEntityId = root.path("payload").path("payment").path("entity").path("id").asText();
-            if (event.isBlank() || paymentEntityId.isBlank()) return;
-            String eventId = root.path("id").asText(event + ":" + paymentEntityId);
-            if (eventId.isBlank() || !claimEvent(eventId, event)) return;
             JsonNode payment = root.path("payload").path("payment").path("entity");
+            JsonNode refund = root.path("payload").path("refund").path("entity");
+            String entityId = event.startsWith("refund.") ? refund.path("id").asText() : payment.path("id").asText();
+            if (event.isBlank() || entityId.isBlank()) return;
+            String eventId = root.path("id").asText();
+            if (eventId.isBlank()) eventId = event + ":" + entityId;
+            if (eventId.isBlank() || !claimEvent(eventId, event)) return;
+            if (event.startsWith("refund.")) {
+                reconcileRefund(event, refund, eventId);
+                return;
+            }
             String providerOrderId = payment.path("order_id").asText();
             String paymentId = payment.path("id").asText();
             if (providerOrderId.isBlank()) return;
@@ -76,9 +83,49 @@ public class RazorpayPaymentService {
                 order.markPaid();
                 printJobs.enqueueOnce(order);
             }
-            if (event.equals("payment.failed")) transaction.fail(payment.path("error_description").asText("Payment failed"));
+            if (event.equals("payment.failed")) {
+                transaction.fail(payment.path("error_description").asText("Payment failed"));
+                if ("FAILED".equals(transaction.getStatus())) order.markPaymentFailed();
+            }
             transaction.setProviderEventId(eventId); transactions.save(transaction); orders.save(order);
         } catch (Exception error) { throw new IllegalArgumentException("Invalid Razorpay webhook payload", error); }
+    }
+
+    private void reconcileRefund(String event, JsonNode refund, String eventId) {
+        String refundId = refund.path("id").asText();
+        String paymentId = refund.path("payment_id").asText();
+        PaymentTransaction transaction = transactions.findByRefundId(refundId)
+            .orElseGet(() -> transactions.findByProviderAndProviderPaymentId(PROVIDER, paymentId)
+                .orElseThrow(() -> new IllegalArgumentException("Refund payment transaction not found")));
+        if (transaction.getRefundId() != null && !transaction.getRefundId().equals(refundId)) {
+            throw new IllegalArgumentException("Refund does not belong to this transaction");
+        }
+        long amount = refund.path("amount").asLong(-1);
+        String currency = refund.path("currency").asText("INR");
+        if (amount != transaction.getAmountMinor() || !"INR".equals(currency)) {
+            throw new IllegalArgumentException("Refund amount or currency does not match the payment");
+        }
+        if (event.equals("refund.processed")) {
+            transaction.refundProcessed(refundId, amount);
+        } else if (event.equals("refund.failed")) {
+            String reason = refund.path("error_description").asText(refund.path("status").asText("Refund failed"));
+            transaction.refundFailed(refundId, reason);
+        } else if (event.equals("refund.created")) {
+            transaction.refundRequested(refundId, amount, "Print job failed");
+        }
+        transaction.setProviderEventId(eventId);
+        transactions.save(transaction);
+        orders.save(transactionOrder(transaction));
+    }
+
+    private PrintOrder transactionOrder(PaymentTransaction transaction) {
+        return orders.findById(transaction.getOrderId()).orElseThrow(() -> new IllegalArgumentException("Refund order not found"));
+    }
+
+    private void requireOwner(PrintOrder order, UUID userId) {
+        if (order.getUserId() != null && !order.getUserId().equals(userId)) {
+            throw new org.springframework.security.access.AccessDeniedException("Order does not belong to this user");
+        }
     }
 
     private boolean claimEvent(String eventId, String event) {

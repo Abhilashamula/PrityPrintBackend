@@ -76,6 +76,7 @@ public class AuthService {
     @Transactional(readOnly = true)
     public AuthDtos.AuthResponse login(AuthDtos.LoginRequest request) {
         User user = users.findByEmailIgnoreCase(request.email().trim()).orElseThrow(() -> new IllegalArgumentException("Invalid email or password"));
+        if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) throw new IllegalArgumentException("Invalid email or password");
         if (requireEmailVerification && !user.isEmailVerified()) throw new IllegalStateException("Verify your email before logging in");
         return new AuthDtos.AuthResponse(jwtService.issue(user), toResponse(user));
     }
